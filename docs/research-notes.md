@@ -1,0 +1,39 @@
+# Research notes and ruleset boundary
+
+Reviewed October 14, 2026. The supplied PDF, _Conquer Online Clean-Room Reconstruction Research Report_, has 46 pages. It is a research brief rather than an executable specification. This project uses its recommendation to keep authoritative map coordinates separate from rendering, create original assets, and send player intent through a new protocol.
+
+## Two distinct source baselines
+
+The pasted blueprint favors patches 5017/5065 and historical protocol compatibility. The PDF instead identifies live patch 7961 at its research cutoff, refers to patch 5517 for technical evidence, recommends Blender/glTF/Godot, and favors a new network protocol. Those choices describe different products. This repository deliberately starts with a **classic-inspired browser ruleset**, four classic class families with separate Fire/Water Taoist choices, original procedural art, and a browser-native server. It does not claim exact compatibility with any historical client patch.
+
+In particular, the PDF's page 20 explicitly says a 2:1 isometric transform does not establish an original universal 64 × 32 pixel cell size. That size is this project's rendering choice. Skill coefficients, stamina costs, timing, experience curves, drop rates, and quest rewards in the prototype are project balance values until measured against a pinned reference.
+
+## Reference findings
+
+| Reference                                                                                                                         | Verified scope                                                                                                                                                                                                                                                                                                                                                                                                              | How it informs this project                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [Comet](https://github.com/conquer-online/comet)                                                                                  | Educational account/game-server split; its README states game features beyond login are absent. Lists separate 4274, 4294, 4343, 5017, 5065, and 5187 targets.                                                                                                                                                                                                                                                              | Version boundaries and authentication architecture; a complete combat/economy server cannot be assumed.       |
+| [CoEmu](https://github.com/shekohex/coemu)                                                                                        | Rust emulator targeting 5017; SQLite setup and separate auth/game servers; README marks construction in progress.                                                                                                                                                                                                                                                                                                           | An interoperability option to evaluate separately from this web-native server.                                |
+| [Preservation CO Client](https://github.com/deklol/Preservation-CO-Client)                                                        | Public Rust 5065 skeleton documents local map/character rendering, movement, collision, minimap and file readers; excludes server connection, combat, skill UI and game assets.                                                                                                                                                                                                                                             | Movement/rendering research, without assuming its public source is a complete playable client.                |
+| [Development Wiki](https://conquer-online.github.io/wiki/)                                                                        | Community documentation index for formats, constants, messages and cryptography. The published [Damage](https://conquer-online.github.io/wiki/algorithms/calculations/damage.html), [DMAP](https://conquer-online.github.io/wiki/files/formats/dmap.html) and [Item Composition](https://conquer-online.github.io/wiki/algorithms/rates/item-composition.html) pages reviewed here contain headings without specifications. | Follow links to actual version-tagged records; an index entry alone is not evidence for an exact formula.     |
+| [Web floor editor](https://github.com/co-stuff/web-floor-editor) and [web map viewer](https://github.com/co-stuff/web-map-viewer) | Public projects describe DMAP floor editing and map resources including atlases, puzzles and covers.                                                                                                                                                                                                                                                                                                                        | Useful candidates for future fixture-driven map research. No original map data is imported in this prototype. |
+| [COPS enhanced edition](https://github.com/cptsky42/COPS-v6-Emulator---Enhanced-Edition)                                          | Archived GitHub mirror points to GitLab. README describes original 5017 history and enhanced 4330 target, plus Lua scripting and shared/parallel DMAP loading.                                                                                                                                                                                                                                                              | The pasted blueprint's single 5017 label omits a target-version distinction.                                  |
+
+These are upstream implementation references, not dependencies or copied source in this repository. Their code licenses and asset rights are separate concerns if source or content is incorporated later.
+
+## Evidence needed for exact reproduction
+
+Before assigning a historical ruleset label, store each externally derived rule with its build, source, measured value, unit, confidence, and validating fixture. Keep unknowns explicit; do not combine live Chi/Perfection rules with a classic ruleset accidentally.
+
+```json
+{
+  "key": "movement.jump.maximum_cells",
+  "build": "unassigned",
+  "value": null,
+  "unit": "cells",
+  "source": "pending measured reference",
+  "confidence": "unknown"
+}
+```
+
+The next compatibility research should obtain paired input/output measurements for legal and rejected jumps, attack ranges, skill hit shapes, defense floors, XP timing, and composition consumption. Binary readers need small build-tagged fixtures covering bounds, corrupt lengths, checksums, signed heights, and unknown layer types. Packet seals, encryption keys and offsets from the pasted blueprint remain research hypotheses until validated for the selected build.

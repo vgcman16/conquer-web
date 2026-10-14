@@ -1,0 +1,12 @@
+node_modules/
+dist/
+artifacts/
+server/data/
+.env*
+.DS_Store
+*.tgz
+*.tar.gz
+.sites-runtime/
+.sites-checkout/
+.sites-checkout-*/
+.playwright-cli/
