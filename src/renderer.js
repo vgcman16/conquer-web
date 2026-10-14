@@ -1468,6 +1468,7 @@ export class GameRenderer {
       autoDensity: true,
       preference: "webgl",
       powerPreference: "high-performance",
+      preserveDrawingBuffer: Boolean(window.__vt_pending),
     });
     this.app.ticker.stop();
     this.app.canvas.style.cssText =
