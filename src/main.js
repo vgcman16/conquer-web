@@ -93,6 +93,8 @@ $("#app").innerHTML = `
 <div class="toast hidden" id="toast" role="status"></div></div><div class="zone-flash" id="zone-flash"></div><div class="overlay" id="intro"></div><div class="overlay hidden" id="modal"></div></main>`;
 
 const renderer = new GameRenderer();
+$("#intro").innerHTML =
+  '<section class="modal loading-modal"><div class="eyebrow">JADE REALM</div><h2>The gates are opening</h2><p>Preparing your world…</p><div class="loading-realm"><i></i></div></section>';
 await renderer.init($("#game"));
 let introDescription = () => {
   const c = CLASSES.find((c) => c.id === chosenClass);
@@ -194,7 +196,9 @@ function perform(cmd, { quiet = false } = {}) {
   }
   if (
     result.ok &&
-    ["quest_accept", "quest_claim", "compose", "equip"].includes(cmd.type)
+    ["quest_accept", "quest_claim", "compose", "equip", "unequip"].includes(
+      cmd.type,
+    )
   ) {
     log("Journey", result.message || "Your progress has been updated.");
     save();
@@ -253,41 +257,105 @@ function showNpc(npc) {
   }
   $("#npc-leave")?.addEventListener("click", closeModal);
 }
+const EQUIPMENT_SLOTS = [
+  { id: "helmet", name: "Helmet", icon: "shield" },
+  { id: "necklace", name: "Necklace", icon: "gem" },
+  { id: "armor", name: "Armor", icon: "shield" },
+  { id: "garment", name: "Garment", icon: "scroll" },
+  { id: "weapon", name: "Weapon", icon: "sword" },
+  { id: "offhand", name: "Off-hand", icon: "shield" },
+  { id: "ring", name: "Ring", icon: "gem" },
+  { id: "boots", name: "Boots", icon: "jump" },
+];
+let inspectedSlot = "weapon";
+function equipmentIcon(item) {
+  const model = item?.appearance?.model;
+  const art = /armor/.test(model || "")
+    ? "armor"
+    : model === "crown"
+      ? "helmet"
+      : model === "boots"
+        ? "boots"
+        : model === "cape"
+          ? "garment"
+          : model === "shield"
+            ? "offhand"
+            : ["sword", "glaive", "spear", "dagger"].includes(model)
+              ? "weapon"
+              : /potion/i.test(item?.name || "")
+                ? "potion"
+                : null;
+  return art
+    ? `<span class="item-art art-${art}" aria-hidden="true"></span>`
+    : icon(
+        model === "bow"
+          ? "bow"
+          : ["staff", "wand", "orb"].includes(model)
+            ? "magic"
+            : /stone|gem|pendant|ring/i.test(item?.name || "")
+              ? "gem"
+              : "scroll",
+      );
+}
 function showInventory() {
   const p = self(),
     items = p.inventory || [],
-    eq = p.equipment || {},
-    equipped =
-      typeof eq.weapon === "object"
-        ? eq.weapon
-        : items.find((i) => i.id === eq.weapon),
-    potions = items.filter((i) => /potion/i.test(i.name));
+    eq = p.equipment || {};
+  const equipped = items.find((i) => i.id === eq[inspectedSlot]);
+  let preview = "";
+  try {
+    preview = renderer.equipmentPreview?.(p) || "";
+  } catch {}
+  const slotTiles = EQUIPMENT_SLOTS.map((slot) => {
+    const gear = items.find((i) => i.id === eq[slot.id]);
+    return `<button class="gear-slot ${gear ? "filled" : ""} ${inspectedSlot === slot.id ? "selected" : ""}" data-slot="${slot.id}" title="${esc(gear?.name || slot.name + " · empty")}"><span>${icon(slot.icon)}</span><small>${slot.name}</small>${gear ? `<b>+${gear.plus || 0}</b>` : ""}</button>`;
+  }).join("");
   openModal(
-    `<div class="eyebrow">${icon("bag")} CHARACTER & EQUIPMENT</div><h2>Your belongings</h2><div class="inventory-meta"><span>${esc(p.name)} · Level ${p.level} · ${esc(CLASSES.find((c) => c.id === p.classId)?.name || p.classId)}</span><span>${p.gold.toLocaleString()} silver</span></div><div class="equipped-row">${icon(classIcon(p.classId))}<span>Weapon: ${esc(equipped?.name || eq.weapon?.name || "Starter weapon")}${equipped?.plus ? ` +${equipped.plus}` : ""}</span><button class="compose-button" id="compose-equipped">Compose +1</button></div><div class="items-grid">${items.map((i) => `<div class="item ${i.quality === "super" ? "super" : ""}"><div class="item-icon">${icon(/potion/i.test(i.name) ? "potion" : /stone|gem/i.test(i.name) ? "gem" : i.slot === "armor" ? "shield" : i.slot === "weapon" ? classIcon(p.classId) : "coin")}</div><b>${esc(i.name)}${i.plus ? ` +${i.plus}` : ""}${i.qty > 1 ? ` ×${i.qty}` : ""}</b><small>${esc(i.quality || i.slot || "Consumable")}${i.attack ? ` · ATK ${i.attack}` : ""}</small>${["weapon", "armor", "boots", "ring", "garment", "necklace"].includes(i.slot) ? `<button data-equip="${esc(i.id)}">${eq[i.slot] === i.id || eq[i.slot]?.id === i.id ? "Equipped" : "Equip"}</button>` : /potion/i.test(i.name) ? `<button data-potion>Use potion</button>` : "<small>Composition material</small>"}</div>`).join("") || "<p>Your bag is empty. Defeat monsters to find loot.</p>"}</div><p>Defeated enemies leave loot. Walk close and press E to collect it. Compose consumes one upgrade stone and improves your equipped weapon.</p>`,
+    `<div class="eyebrow">${icon("bag")} CHARACTER & EQUIPMENT</div><h2>Your belongings</h2><div class="inventory-meta"><span>${esc(p.name)} · Level ${p.level} · ${esc(CLASSES.find((c) => c.id === p.classId)?.name || p.classId)}</span><span>${p.gold.toLocaleString()} silver</span></div><div class="equipment-layout"><aside class="paperdoll"><div class="paperdoll-stage"><div class="paperdoll-halo"></div><img id="equipment-preview" alt="Your character with currently equipped pieces" src="${esc(preview || import.meta.env.BASE_URL + "art/body.png")}"><span class="paperdoll-title">${esc(p.name)}</span></div><div class="gear-slots">${slotTiles}</div><div class="paperdoll-stats"><span>Attack <b>${p.attack ?? "—"}</b></span><span>Defense <b>${p.defense ?? "—"}</b></span></div><div class="gear-detail"><small>${esc(EQUIPMENT_SLOTS.find((x) => x.id === inspectedSlot)?.name).toUpperCase()}</small><b>${esc(equipped?.name || "Empty slot")}${equipped?.plus ? ` +${equipped.plus}` : ""}</b><p>${equipped ? `${equipped.attack ? `Attack +${equipped.attack}` : ""}${equipped.attack && equipped.defense ? " · " : ""}${equipped.defense ? `Defense +${equipped.defense}` : ""}` : "Choose a piece in your bag to equip it."}</p><div>${equipped ? '<button id="unequip-slot">Remove piece</button>' : ""}<button class="compose-button" id="compose-equipped" ${equipped ? "" : "disabled"}>Compose +1</button></div></div></aside><div class="bag-content"><div class="bag-title">YOUR BAG <span>${items.length} pieces</span></div><div class="items-grid">${items
+      .map((i) => {
+        const wearable = EQUIPMENT_SLOTS.some((s) => s.id === i.slot),
+          isEquipped = eq[i.slot] === i.id;
+        return `<div class="item ${isEquipped ? "item-equipped" : ""} ${i.quality === "super" ? "super" : ""}" data-item="${esc(i.id)}"><div class="item-icon">${equipmentIcon(i)}</div><b>${esc(i.name)}${i.plus ? ` +${i.plus}` : ""}${i.qty > 1 ? ` ×${i.qty}` : ""}</b><small>${esc(i.slot || "Consumable")}${i.attack ? ` · ATK ${i.attack}` : i.defense ? ` · DEF ${i.defense}` : ""}</small>${wearable ? `<button data-equip="${esc(i.id)}" title="${isEquipped ? "Remove this piece" : "Equip to " + i.slot}">${isEquipped ? "Equipped" : "Equip"}</button>` : /potion/i.test(i.name) ? "<button data-potion>Use potion</button>" : "<small>Composition material</small>"}</div>`;
+      })
+      .join(
+        "",
+      )}</div><p class="bag-hint">Each piece occupies its own slot. Weapons, armor, helmets, boots and garments change your character’s appearance. Compose near Master Wu using one stone and 25 silver.</p></div></div>`,
   );
   $("#modal .modal").classList.add("inventory-modal");
+  document.querySelectorAll("[data-slot]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        inspectedSlot = b.dataset.slot;
+        showInventory();
+      }),
+  );
   document.querySelectorAll("[data-equip]").forEach(
     (b) =>
       (b.onclick = () => {
+        const item = items.find((i) => i.id === b.dataset.equip);
+        inspectedSlot = item?.slot || inspectedSlot;
         perform({ type: "equip", itemId: b.dataset.equip });
-        showInventory();
+        if (!online) showInventory();
       }),
   );
   document.querySelectorAll("[data-potion]").forEach(
     (b) =>
       (b.onclick = () => {
         perform({ type: "potion" });
-        showInventory();
+        if (!online) showInventory();
       }),
   );
+  $("#unequip-slot")?.addEventListener("click", () => {
+    perform({ type: "unequip", slot: inspectedSlot });
+    if (!online) showInventory();
+  });
   $("#compose-equipped").onclick = () => {
-    perform({
-      type: "compose",
-      itemId: equipped?.id || eq.weapon?.id || eq.weapon,
-    });
-    showInventory();
+    if (!equipped) return;
+    perform({ type: "compose", itemId: equipped.id });
+    if (!online) showInventory();
   };
 }
+
 function nearestEnemy() {
   const p = self();
   return [...(state.enemies || [])]
@@ -458,7 +526,7 @@ function connect(url) {
     }
     if (m.type === "result") {
       const r = m.result || m;
-      if (r.ok && ["equip", "compose", "potion"].includes(m.command))
+      if (r.ok && ["equip", "unequip", "compose", "potion"].includes(m.command))
         pendingInventoryRefresh = true;
       if (
         r.message &&

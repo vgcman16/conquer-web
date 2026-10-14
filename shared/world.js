@@ -223,6 +223,76 @@ export function canJump(zone, from, to) {
   }
   return true;
 }
+export const EQUIPMENT_SLOTS = [
+  "weapon",
+  "offhand",
+  "armor",
+  "helmet",
+  "boots",
+  "garment",
+  "ring",
+  "necklace",
+];
+export const APPEARANCE_MODELS = [
+  "sword",
+  "glaive",
+  "spear",
+  "bow",
+  "staff",
+  "wand",
+  "dagger",
+  "shield",
+  "quiver",
+  "orb",
+  "light-armor",
+  "heavy-armor",
+  "crown",
+  "boots",
+  "cape",
+  "ring",
+  "necklace",
+];
+const APPEARANCE_TYPES = [
+  "saber",
+  "longsword",
+  "cleaver",
+  "halberd",
+  "recurve",
+  "longbow",
+  "shortbow",
+  "ember",
+  "jade",
+  "crystal",
+  "ivory",
+  "jade-leather",
+  "crimson-iron",
+  "bronze",
+  "cloudstep",
+  "iron",
+  "crimson",
+  "storm",
+  "round",
+  "leather",
+  "flame",
+  "phoenix",
+];
+const GRIPS = ["single", "dual", "two-hand", "ranged", "caster"];
+function sanitizeAppearance(value) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !APPEARANCE_MODELS.includes(value.model)
+  )
+    return undefined;
+  const color = (value) =>
+    typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+  const appearance = { model: value.model };
+  if (APPEARANCE_TYPES.includes(value.type)) appearance.type = value.type;
+  for (const key of ["color", "trim", "glow"])
+    if (color(value[key])) appearance[key] = value[key].toLowerCase();
+  if (GRIPS.includes(value.grip)) appearance.grip = value.grip;
+  return appearance;
+}
 function item(
   id,
   name,
@@ -233,12 +303,240 @@ function item(
   defense = 0,
   plus = 0,
   qty = 1,
+  appearance,
 ) {
-  return { id, name, icon, quality, slot, attack, defense, plus, qty };
+  return {
+    id,
+    name,
+    icon,
+    quality,
+    slot,
+    attack,
+    defense,
+    plus,
+    qty,
+    ...(appearance ? { appearance } : {}),
+  };
+}
+function starterInventory(id, archetype) {
+  const weapons = {
+    trojan: [
+      [archetype.weapon, "sword", "saber", "#b9d4d3", "#8c6440", "dual"],
+      ["Jade longsword", "sword", "longsword", "#7fc1a3", "#d8b974", "single"],
+      ["Crimson cleaver", "sword", "cleaver", "#ce655a", "#e0b76a", "single"],
+    ],
+    warrior: [
+      [archetype.weapon, "glaive", "halberd", "#a5b8c6", "#9a7248", "two-hand"],
+      [
+        "Jade battle sword",
+        "sword",
+        "longsword",
+        "#7fc1a3",
+        "#d8b974",
+        "single",
+      ],
+      ["Phoenix spear", "spear", "storm", "#ddbd72", "#bd604d", "two-hand"],
+    ],
+    archer: [
+      [archetype.weapon, "bow", "recurve", "#a78359", "#d8b974", "ranged"],
+      ["Jade longbow", "bow", "longbow", "#7fc1a3", "#d8b974", "ranged"],
+      ["Crimson shortbow", "bow", "shortbow", "#ce655a", "#dfbf76", "ranged"],
+    ],
+    fire: [
+      [archetype.weapon, "staff", "ember", "#b27750", "#edaa63", "caster"],
+      ["Ivory flame wand", "wand", "ivory", "#e7dfc5", "#dc8b63", "caster"],
+      [
+        "Crimson crystal staff",
+        "staff",
+        "crystal",
+        "#ce655a",
+        "#dfbf76",
+        "caster",
+      ],
+    ],
+    water: [
+      [archetype.weapon, "staff", "jade", "#7fc1a3", "#d8b974", "caster"],
+      ["Ivory tide wand", "wand", "ivory", "#e7dfc5", "#81bdd1", "caster"],
+      [
+        "Azure crystal staff",
+        "staff",
+        "crystal",
+        "#81bdd1",
+        "#e2dbc2",
+        "caster",
+      ],
+    ],
+  }[archetype.id];
+  const inventory = weapons.map(
+    ([name, model, type, color, trim, grip], index) =>
+      item(
+        index === 0 ? `${id}-weapon` : `${id}-weapon-${index}`,
+        name,
+        "weapon",
+        index === 0 ? "refined" : "unique",
+        "weapon",
+        [12, 18, 22][index],
+        0,
+        index === 0 ? 1 : 0,
+        1,
+        {
+          model,
+          type,
+          color,
+          trim,
+          grip,
+          ...(index === 2 ? { glow: color } : {}),
+        },
+      ),
+  );
+  const gear = (suffix, name, slot, attack, defense, appearance) =>
+    item(
+      `${id}-${suffix}`,
+      name,
+      slot,
+      "normal",
+      slot,
+      attack,
+      defense,
+      0,
+      1,
+      appearance,
+    );
+  inventory.push(
+    gear("armor", "Traveler armor", "armor", 0, 6, {
+      model: "light-armor",
+      type: "jade-leather",
+      color: "#6e9c83",
+      trim: "#d4b579",
+    }),
+    gear("armor-iron", "Crimson iron armor", "armor", 0, 11, {
+      model: "heavy-armor",
+      type: "crimson-iron",
+      color: "#a9584e",
+      trim: "#d7b26c",
+    }),
+    gear("boots", "Cloudstep boots", "boots", 0, 2, {
+      model: "boots",
+      type: "cloudstep",
+      color: "#665044",
+      trim: "#bda477",
+    }),
+    gear("boots-iron", "Iron greaves", "boots", 0, 4, {
+      model: "boots",
+      type: "iron",
+      color: "#a6b5be",
+      trim: "#9b7250",
+    }),
+    gear("helmet", "Iron Crown", "helmet", 0, 3, {
+      model: "crown",
+      type: "bronze",
+      color: "#ae824f",
+      trim: "#dec382",
+    }),
+    gear("garment-crimson", "Crimson cape", "garment", 0, 2, {
+      model: "cape",
+      type: "crimson",
+      color: "#b84548",
+      trim: "#e5bc71",
+    }),
+    gear("garment-ivory", "Ivory cape", "garment", 0, 1, {
+      model: "cape",
+      type: "ivory",
+      color: "#e9e0c9",
+      trim: "#96b4aa",
+    }),
+  );
+  const offhand = {
+    trojan: [
+      "Storm dagger",
+      6,
+      0,
+      {
+        model: "dagger",
+        type: "storm",
+        color: "#a9cad0",
+        trim: "#c79860",
+        grip: "single",
+      },
+    ],
+    warrior: [
+      "Bronze shield",
+      0,
+      6,
+      { model: "shield", type: "round", color: "#ae824f", trim: "#dec382" },
+    ],
+    archer: [
+      "Leather quiver",
+      3,
+      1,
+      { model: "quiver", type: "leather", color: "#825d43", trim: "#c3a276" },
+    ],
+    fire: [
+      "Flame orb",
+      4,
+      1,
+      {
+        model: "orb",
+        type: "flame",
+        color: "#dd9563",
+        trim: "#d2b778",
+        glow: "#eead69",
+      },
+    ],
+    water: [
+      "Jade orb",
+      4,
+      1,
+      {
+        model: "orb",
+        type: "jade",
+        color: "#7fc1a3",
+        trim: "#d8b974",
+        glow: "#91d6c0",
+      },
+    ],
+  }[archetype.id];
+  inventory.push(
+    gear("offhand", offhand[0], "offhand", offhand[1], offhand[2], offhand[3]),
+  );
+  inventory.push(
+    gear("necklace", "Jade pendant", "necklace", 0, 2, {
+      model: "necklace",
+      type: "jade",
+      color: "#9ccbb8",
+      trim: "#d4bc7b",
+      glow: "#a9dbc7",
+    }),
+  );
+  inventory.push(
+    item(
+      `${id}-potion`,
+      "Health potion",
+      "potion",
+      "normal",
+      "consumable",
+      0,
+      0,
+      0,
+      5,
+    ),
+    item(
+      `${id}-stone`,
+      "Composition stone",
+      "stone",
+      "unique",
+      "material",
+      0,
+      0,
+      0,
+      1,
+    ),
+  );
+  return inventory;
 }
 export function createPlayer(id, name, classId = "trojan") {
   const archetype = CLASSES.find((c) => c.id === classId) ?? CLASSES[0];
-  return {
+  const player = {
     id,
     name:
       String(name || "Wanderer")
@@ -262,42 +560,7 @@ export function createPlayer(id, name, classId = "trojan") {
     nextXp: 100,
     level: 1,
     gold: 125,
-    inventory: [
-      item(
-        `${id}-weapon`,
-        archetype.weapon,
-        "weapon",
-        "refined",
-        "weapon",
-        12,
-        0,
-        1,
-      ),
-      item(`${id}-armor`, "Traveler armor", "armor", "normal", "armor", 0, 6),
-      item(`${id}-boots`, "Cloudstep boots", "boots", "normal", "boots", 0, 2),
-      item(
-        `${id}-potion`,
-        "Health potion",
-        "potion",
-        "normal",
-        "consumable",
-        0,
-        0,
-        0,
-        5,
-      ),
-      item(
-        `${id}-stone`,
-        "Composition stone",
-        "stone",
-        "unique",
-        "material",
-        0,
-        0,
-        0,
-        1,
-      ),
-    ],
+    inventory: starterInventory(id, archetype),
     equipment: {
       weapon: `${id}-weapon`,
       armor: `${id}-armor`,
@@ -317,6 +580,7 @@ export function createPlayer(id, name, classId = "trojan") {
     lastMessage:
       "Welcome to Twin Haven. Speak with Captain Shen or enter Phoenix Fields.",
   };
+  return syncEquipmentStats(player);
 }
 /** Restore only local save data. The online server never trusts a supplied save. */
 export function hydratePlayer(
@@ -338,16 +602,8 @@ export function hydratePlayer(
   player.hp = player.maxHp;
   player.mana = player.maxMana;
   if (Array.isArray(saved.inventory)) {
-    const allowed = [
-      "weapon",
-      "armor",
-      "boots",
-      "ring",
-      "garment",
-      "necklace",
-      "consumable",
-      "material",
-    ];
+    const starter = player.inventory;
+    const allowed = [...EQUIPMENT_SLOTS, "consumable", "material"];
     const valid = saved.inventory
       .slice(0, 100)
       .filter(
@@ -368,10 +624,39 @@ export function hydratePlayer(
         defense: Math.max(0, Math.min(200, Number(i.defense) || 0)),
         plus: Math.max(0, Math.min(12, Math.floor(Number(i.plus) || 0))),
         qty: Math.max(0, Math.min(999, Math.floor(Number(i.qty) || 0))),
+        ...(sanitizeAppearance(
+          i.appearance ||
+            starter.find(
+              (template) =>
+                template.name === i.name && template.slot === i.slot,
+            )?.appearance,
+        )
+          ? {
+              appearance: sanitizeAppearance(
+                i.appearance ||
+                  starter.find(
+                    (template) =>
+                      template.name === i.name && template.slot === i.slot,
+                  )?.appearance,
+              ),
+            }
+          : {}),
       }));
+    // Existing local saves receive the new wardrobe without restoring consumed supplies.
+    for (const template of starter)
+      if (
+        EQUIPMENT_SLOTS.includes(template.slot) &&
+        !player.inventory.some(
+          (i) => i.name === template.name && i.slot === template.slot,
+        )
+      )
+        player.inventory.push(template);
     player.equipment = {};
     for (const [slot, equipped] of Object.entries(saved.equipment || {})) {
-      if (player.inventory.some((i) => i.id === equipped && i.slot === slot))
+      if (
+        EQUIPMENT_SLOTS.includes(slot) &&
+        player.inventory.some((i) => i.id === equipped && i.slot === slot)
+      )
         player.equipment[slot] = equipped;
     }
   }
@@ -381,7 +666,7 @@ export function hydratePlayer(
       kills: Math.max(0, Math.min(5, Number(saved.quest.kills) || 0)),
       claimed: !!saved.quest.claimed,
     };
-  return player;
+  return syncEquipmentStats(player);
 }
 export function createWorld() {
   const world = {
@@ -450,17 +735,31 @@ function effect(world, data) {
     ...data,
   });
 }
-function stats(player) {
+export function getPlayerStats(player) {
   const base = RULES[player.classId];
   let attack = base.attack + (player.level - 1) * 3,
     defense = base.defense + (player.level - 1) * 2;
-  for (const id of Object.values(player.equipment)) {
-    const it = player.inventory.find((i) => i.id === id);
-    if (!it) continue;
-    attack += (it.attack ?? 0) + (it.slot === "weapon" ? it.plus * 4 : 0);
-    defense += (it.defense ?? 0) + (it.slot !== "weapon" ? it.plus * 2 : 0);
+  for (const [slot, id] of Object.entries(player.equipment)) {
+    const it = player.inventory.find((i) => i.id === id && i.slot === slot);
+    if (!it || !EQUIPMENT_SLOTS.includes(slot)) continue;
+    attack += (it.attack ?? 0) + (it.attack > 0 ? it.plus * 4 : 0);
+    defense += (it.defense ?? 0) + (it.defense > 0 ? it.plus * 2 : 0);
   }
   return { ...base, attack, defense };
+}
+const stats = getPlayerStats;
+function syncEquipmentStats(player) {
+  const computed = getPlayerStats(player);
+  player.attack = computed.attack;
+  player.defense = computed.defense;
+  return player;
+}
+function equipmentResult(player, message) {
+  syncEquipmentStats(player);
+  return result(true, message, {
+    equipment: { ...player.equipment },
+    stats: { attack: player.attack, defense: player.defense },
+  });
 }
 function giveXP(world, player, amount) {
   player.xp += amount;
@@ -486,6 +785,7 @@ function giveXP(world, player, amount) {
       duration: 1.4,
     });
   }
+  syncEquipmentStats(player);
 }
 function damageEnemy(world, player, enemy, damage) {
   if (enemy.hp <= 0) return;
@@ -916,9 +1216,12 @@ export function command(world, playerId, input) {
       8,
       0,
       1,
+      1,
+      { model: "ring", type: "phoenix", color: "#d0ad57", glow: "#e3c777" },
     );
     player.inventory.push(ring);
     player.equipment.ring = ring.id;
+    syncEquipmentStats(player);
     return result(
       true,
       "Task complete! +150 silver, +80 experience, and a Phoenix ring equipped.",
@@ -926,19 +1229,24 @@ export function command(world, playerId, input) {
   }
   if (type === "equip") {
     const it = player.inventory.find((i) => i.id === input.itemId);
-    if (
-      !it ||
-      !["weapon", "armor", "boots", "ring", "garment", "necklace"].includes(
-        it.slot,
-      )
-    )
+    if (!it || !EQUIPMENT_SLOTS.includes(it.slot))
       return result(false, "Choose equipment from your inventory.");
     if (player.equipment[it.slot] === it.id) {
       delete player.equipment[it.slot];
-      return result(true, `Unequipped ${it.name}.`);
+      return equipmentResult(player, `Unequipped ${it.name}.`);
     }
     player.equipment[it.slot] = it.id;
-    return result(true, `Equipped ${it.name}.`);
+    return equipmentResult(player, `Equipped ${it.name}.`);
+  }
+  if (type === "unequip") {
+    if (!EQUIPMENT_SLOTS.includes(input.slot))
+      return result(false, "Choose an equipment slot.");
+    const equipped = player.inventory.find(
+      (i) => i.id === player.equipment[input.slot],
+    );
+    if (!equipped) return result(false, "That slot is already empty.");
+    delete player.equipment[input.slot];
+    return equipmentResult(player, `Unequipped ${equipped.name}.`);
   }
   if (type === "compose") {
     const it = player.inventory.find((i) => i.id === input.itemId);
@@ -952,7 +1260,8 @@ export function command(world, playerId, input) {
     if (!smith) return result(false, "Visit Master Wu to compose equipment.");
     if (
       !it ||
-      !["weapon", "armor", "boots", "ring"].includes(it.slot) ||
+      !EQUIPMENT_SLOTS.includes(it.slot) ||
+      (it.attack <= 0 && it.defense <= 0) ||
       it.plus >= 12
     )
       return result(false, "Choose equipment below +12.");
@@ -961,7 +1270,7 @@ export function command(world, playerId, input) {
     stone.qty--;
     player.gold -= 25;
     it.plus++;
-    return result(true, `${it.name} is now +${it.plus}.`);
+    return equipmentResult(player, `${it.name} is now +${it.plus}.`);
   }
   if (type === "portal") {
     const portal = zoneDefs[player.zone].portal;
@@ -1121,6 +1430,7 @@ export function snapshot(world, playerId) {
   const self = world.players.find((p) => p.id === playerId),
     zone = self?.zone ?? "city",
     def = zoneDefs[zone];
+  for (const player of world.players) syncEquipmentStats(player);
   const state = {
     time: world.time,
     selfId: playerId,

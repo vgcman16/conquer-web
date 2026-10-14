@@ -13,6 +13,8 @@ import {
   isWalkable,
   zoneDefs,
   CLASSES,
+  EQUIPMENT_SLOTS,
+  getPlayerStats,
 } from "../shared/world.js";
 
 function setup(classId = "trojan") {
@@ -247,7 +249,8 @@ test("save hydration retains progress and never restores unsafe positions or ext
   assert.equal(restored.gold, 777);
   assert.equal(restored.zone, "city");
   assert.equal(restored.x, 24);
-  assert.equal(restored.attack, undefined);
+  assert.equal(restored.attack, 59);
+  assert.notEqual(restored.attack, original.attack);
 });
 
 test("WebSocket realm validates joins, synchronizes two players, and answers health", async () => {
@@ -305,6 +308,29 @@ test("WebSocket realm validates joins, synchronizes two players, and answers hea
     );
     assert.equal(health.players, 2);
     assert.equal(health.tickRate, 20);
+    const helmetAck = next(a, "result");
+    a.send(
+      JSON.stringify({
+        type: "command",
+        command: { type: "equip", itemId: `${joined.id}-helmet` },
+      }),
+    );
+    assert.equal(
+      (await helmetAck).result.equipment.helmet,
+      `${joined.id}-helmet`,
+    );
+    let gearState = await next(b, "state");
+    if (
+      !gearState.state.players.find((p) => p.id === joined.id)?.equipment.helmet
+    )
+      gearState = await next(b, "state");
+    const otherHero = gearState.state.players.find((p) => p.id === joined.id);
+    assert.equal(otherHero.equipment.helmet, `${joined.id}-helmet`);
+    assert.equal(
+      otherHero.inventory.find((i) => i.id === otherHero.equipment.helmet)
+        .appearance.model,
+      "crown",
+    );
     a.close();
     b.close();
   } finally {
@@ -346,4 +372,186 @@ test("single-container HTTP serves frontend assets and blocks traversal outside 
     await game.close();
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("class wardrobes provide distinct appearance profiles without changing class skills", () => {
+  for (const archetype of CLASSES) {
+    const player = createPlayer(
+      `wardrobe-${archetype.id}`,
+      "Wardrobe",
+      archetype.id,
+    );
+    assert.equal(player.inventory.length, 14);
+    assert.equal(player.inventory.filter((i) => i.slot === "weapon").length, 3);
+    assert.equal(player.inventory.filter((i) => i.slot === "armor").length, 2);
+    assert.equal(player.inventory.filter((i) => i.slot === "boots").length, 2);
+    assert.equal(
+      player.inventory.filter((i) => i.slot === "garment").length,
+      2,
+    );
+    assert.equal(
+      player.inventory.find((i) => i.slot === "necklace").appearance.model,
+      "necklace",
+    );
+    const weapons = player.inventory.filter((i) => i.slot === "weapon");
+    assert.equal(
+      new Set(weapons.map((i) => JSON.stringify(i.appearance))).size,
+      3,
+    );
+    assert.deepEqual(Object.keys(player.equipment).sort(), [
+      "armor",
+      "boots",
+      "weapon",
+    ]);
+    assert.equal(player.inventory.find((i) => i.icon === "potion").qty, 5);
+    assert.equal(player.inventory.find((i) => i.icon === "stone").qty, 1);
+    assert.ok(
+      player.inventory
+        .filter((i) => EQUIPMENT_SLOTS.includes(i.slot))
+        .every((i) => i.appearance),
+    );
+  }
+});
+test("each equipment slot changes independently, updates stats, and costs no silver", () => {
+  const { world, player } = setup("warrior"),
+    initial = { ...player.equipment },
+    initialAttack = player.attack,
+    initialDefense = player.defense;
+  const armor = player.inventory.find((i) => i.name === "Crimson iron armor");
+  const helmet = player.inventory.find((i) => i.slot === "helmet"),
+    cape = player.inventory.find((i) => i.name === "Crimson cape"),
+    shield = player.inventory.find((i) => i.slot === "offhand"),
+    pendant = player.inventory.find((i) => i.slot === "necklace");
+  for (const it of [armor, helmet, cape, shield, pendant]) {
+    const ack = command(world, player.id, { type: "equip", itemId: it.id });
+    assert.equal(ack.ok, true);
+    assert.equal(ack.equipment[it.slot], it.id);
+    assert.equal(player.equipment.weapon, initial.weapon);
+    assert.equal(player.equipment.boots, initial.boots);
+  }
+  assert.equal(player.attack, initialAttack);
+  assert.equal(player.defense, initialDefense + 5 + 3 + 2 + 6 + 2);
+  assert.equal(player.gold, 125);
+  const remaining = { ...player.equipment };
+  delete remaining.armor;
+  const ack = command(world, player.id, { type: "unequip", slot: "armor" });
+  assert.equal(ack.ok, true);
+  assert.deepEqual(player.equipment, remaining);
+  assert.equal(player.defense, initialDefense + 5 + 3 + 2 + 6 + 2 - 11);
+  assert.equal(
+    command(world, player.id, { type: "unequip", slot: "armor" }).ok,
+    false,
+  );
+  assert.equal(
+    command(world, player.id, { type: "unequip", slot: "consumable" }).ok,
+    false,
+  );
+  assert.equal(
+    command(world, player.id, {
+      type: "equip",
+      itemId: player.inventory.find((i) => i.icon === "potion").id,
+    }).ok,
+    false,
+  );
+});
+test("weapon alternatives change damage while keeping archetype range and skill identity", () => {
+  const { world, player } = setup(),
+    before = player.attack;
+  const cleaver = player.inventory.find((i) => i.name === "Crimson cleaver");
+  command(world, player.id, { type: "equip", itemId: cleaver.id });
+  assert.equal(player.attack, before + 6);
+  assert.equal(player.range, 2.1);
+  assert.equal(player.classId, "trojan");
+  player.zone = "wilds";
+  player.x = 16;
+  player.y = 23;
+  const enemy = world.enemies[0];
+  command(world, player.id, { type: "attack", targetId: enemy.id });
+  assert.equal(enemy.hp, enemy.maxHp - (player.attack - enemy.defense));
+  const dagger = player.inventory.find((i) => i.slot === "offhand");
+  command(world, player.id, { type: "equip", itemId: dagger.id });
+  assert.equal(player.attack, before + 12);
+  command(world, player.id, { type: "unequip", slot: "offhand" });
+  assert.equal(player.attack, before + 6);
+});
+test("helmet composition consumes a stone and improves only equipped defensive stats", () => {
+  const { world, player } = setup();
+  player.x = 29;
+  player.y = 21;
+  const helmet = player.inventory.find((i) => i.slot === "helmet"),
+    defense = player.defense;
+  assert.equal(
+    command(world, player.id, { type: "compose", itemId: helmet.id }).ok,
+    true,
+  );
+  assert.equal(helmet.plus, 1);
+  assert.equal(player.defense, defense);
+  command(world, player.id, { type: "equip", itemId: helmet.id });
+  assert.equal(player.defense, defense + 5);
+  assert.equal(player.inventory.find((i) => i.icon === "stone").qty, 0);
+  assert.equal(player.gold, 100);
+});
+test("appearance and independent slots survive saves while unsafe descriptor fields are rejected", () => {
+  const { world, player } = setup("fire");
+  for (const slot of ["helmet", "offhand", "garment"])
+    command(world, player.id, {
+      type: "equip",
+      itemId: player.inventory.find((i) => i.slot === slot).id,
+    });
+  const restored = hydratePlayer(JSON.parse(JSON.stringify(player)), player.id);
+  assert.deepEqual(restored.equipment, player.equipment);
+  assert.equal(restored.attack, player.attack);
+  assert.equal(restored.defense, player.defense);
+  for (const slot of ["helmet", "offhand", "garment"])
+    assert.deepEqual(
+      restored.inventory.find((i) => i.id === restored.equipment[slot])
+        .appearance,
+      player.inventory.find((i) => i.id === player.equipment[slot]).appearance,
+    );
+  const saved = JSON.parse(JSON.stringify(player)),
+    weapon = saved.inventory.find((i) => i.slot === "weapon");
+  weapon.appearance = {
+    model: "staff",
+    type: "<script>",
+    color: "url(secret)",
+    trim: "#ABCDEF",
+    glow: "javascript:bad",
+    grip: "caster",
+    untrusted: "ignored",
+  };
+  saved.equipment.consumable = saved.inventory.find(
+    (i) => i.icon === "potion",
+  ).id;
+  const safe = hydratePlayer(saved, player.id),
+    appearance = safe.inventory.find((i) => i.id === weapon.id).appearance;
+  assert.deepEqual(appearance, {
+    model: "staff",
+    trim: "#abcdef",
+    grip: "caster",
+  });
+  assert.equal(safe.equipment.consumable, undefined);
+  assert.deepEqual(getPlayerStats(safe).attack, safe.attack);
+});
+test("old saves receive the wardrobe and starter appearance without restoring consumed supplies", () => {
+  const old = createPlayer("legacy", "Legacy", "archer");
+  old.inventory = old.inventory.filter((i) =>
+    [
+      "legacy-weapon",
+      "legacy-armor",
+      "legacy-boots",
+      "legacy-potion",
+      "legacy-stone",
+    ].includes(i.id),
+  );
+  for (const it of old.inventory) delete it.appearance;
+  old.inventory.find((i) => i.icon === "potion").qty = 0;
+  old.inventory.find((i) => i.icon === "stone").qty = 0;
+  const restored = hydratePlayer(old, old.id);
+  assert.equal(restored.inventory.length, 14);
+  assert.ok(
+    restored.inventory.find((i) => i.id === restored.equipment.weapon)
+      .appearance,
+  );
+  assert.equal(restored.inventory.find((i) => i.icon === "potion").qty, 0);
+  assert.equal(restored.inventory.find((i) => i.icon === "stone").qty, 0);
 });

@@ -33,7 +33,7 @@ await page.click("#quest-btn");
 await page.click("#accept-quest");
 assert.equal((await state()).player.quest.accepted, true);
 await page.click("#bag-btn");
-assert.equal(await page.locator(".item").count(), 5);
+assert.ok((await page.locator(".item").count()) >= 8);
 await page.click("#compose-equipped");
 assert.equal(
   (await state()).player.inventory.find((i) => i.slot === "weapon").plus,

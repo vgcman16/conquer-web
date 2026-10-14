@@ -176,6 +176,109 @@ function frameArtwork(texture, region = texture.frame) {
   }
 }
 
+function equipmentComponents(texture, count = 1) {
+  try {
+    const frame = texture.frame,
+      scale = Math.min(1, 512 / Math.max(frame.width, frame.height));
+    const [canvas, ctx] = makeCanvas(frame.width * scale, frame.height * scale);
+    ctx.drawImage(
+      texture.source.resource,
+      frame.x,
+      frame.y,
+      frame.width,
+      frame.height,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const width = canvas.width,
+      height = canvas.height,
+      visited = new Uint8Array(width * height),
+      labels = new Uint32Array(width * height),
+      queue = new Int32Array(width * height),
+      components = [];
+    let serial = 0;
+    for (let start = 0; start < visited.length; start++) {
+      if (visited[start] || pixels[start * 4 + 3] < 96) continue;
+      const id = ++serial;
+      let head = 0,
+        tail = 1,
+        area = 0,
+        minX = width,
+        minY = height,
+        maxX = -1,
+        maxY = -1;
+      queue[0] = start;
+      visited[start] = 1;
+      while (head < tail) {
+        const index = queue[head++],
+          x = index % width,
+          y = Math.floor(index / width);
+        labels[index] = id;
+        area++;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+        for (const next of [
+          x > 0 ? index - 1 : -1,
+          x < width - 1 ? index + 1 : -1,
+          y > 0 ? index - width : -1,
+          y < height - 1 ? index + width : -1,
+        ]) {
+          if (next >= 0 && !visited[next] && pixels[next * 4 + 3] >= 96) {
+            visited[next] = 1;
+            queue[tail++] = next;
+          }
+        }
+      }
+      if (area > 80) components.push({ id, area, minX, minY, maxX, maxY });
+    }
+    const selected = components
+      .sort((a, b) => b.area - a.area)
+      .slice(0, count)
+      .sort((a, b) => a.minX - b.minX);
+    return selected.map((c) => {
+      const x = Math.max(0, c.minX - 2),
+        y = Math.max(0, c.minY - 2),
+        w = Math.min(width - x, c.maxX - c.minX + 5),
+        h = Math.min(height - y, c.maxY - c.minY + 5);
+      const [piece, paint] = makeCanvas(w, h),
+        result = paint.createImageData(w, h);
+      for (let py = 0; py < h; py++)
+        for (let px = 0; px < w; px++) {
+          const source = (py + y) * width + px + x;
+          let belongs = labels[source] === c.id;
+          if (!belongs)
+            for (const delta of [
+              -width - 1,
+              -width,
+              -width + 1,
+              -1,
+              1,
+              width - 1,
+              width,
+              width + 1,
+            ])
+              if (labels[source + delta] === c.id) {
+                belongs = true;
+                break;
+              }
+          if (belongs)
+            for (let channel = 0; channel < 4; channel++)
+              result.data[(py * w + px) * 4 + channel] =
+                pixels[source * 4 + channel];
+        }
+      paint.putImageData(result, 0, 0);
+      return Texture.from(piece);
+    });
+  } catch {
+    return [texture];
+  }
+}
+
 function insideObstacle(x, y, obstacles, margin = 0) {
   return obstacles.some(
     (o) =>
@@ -1419,6 +1522,262 @@ function lanternLightTexture() {
   return Texture.from(canvas);
 }
 
+function weaponLayerTexture(profile = {}) {
+  const [canvas, ctx] = makeCanvas(120, 190);
+  const model = profile.model || "sword",
+    color = profile.color || "#b8c2ba",
+    trim = profile.trim || "#c7a96c";
+  const metal = ctx.createLinearGradient(37, 0, 79, 0);
+  metal.addColorStop(0, shade(color, -48));
+  metal.addColorStop(0.35, shade(color, 14));
+  metal.addColorStop(0.53, "#eee8d4");
+  metal.addColorStop(0.7, color);
+  metal.addColorStop(1, shade(color, -31));
+  const grip = { x: 0.5, y: 0.74 };
+  if (model === "bow") {
+    ctx.beginPath();
+    ctx.moveTo(38, 20);
+    ctx.bezierCurveTo(93, 45, 98, 144, 38, 171);
+    ctx.strokeStyle = shade(color, -39);
+    ctx.lineWidth = 10;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(39, 21);
+    ctx.bezierCurveTo(87, 46, 90, 143, 39, 170);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(39, 21);
+    ctx.lineTo(56, 95);
+    ctx.lineTo(39, 170);
+    ctx.strokeStyle = "#ded8ba";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    for (let i = 0; i < 7; i++)
+      line(ctx, 63, 83 + i * 3, 72, 86 + i * 3, trim, 2);
+    line(ctx, 34, 100, 109, 82, "#e3d9ba", 1.5);
+    polygon(
+      ctx,
+      [
+        [109, 82],
+        [102, 78],
+        [103, 86],
+      ],
+      "#d2dacf",
+      trim,
+      0.7,
+    );
+    grip.x = 0.58;
+    grip.y = 0.5;
+  } else if (model === "staff" || model === "wand") {
+    line(ctx, 60, 27, 61, 184, shade(trim, -37), 8);
+    line(ctx, 58, 28, 59, 181, trim, 2);
+    for (let i = 0; i < 6; i++)
+      line(ctx, 55, 129 + i * 3, 65, 129 + i * 3, shade(color, -30), 2);
+    ctx.beginPath();
+    ctx.arc(60, 28, 23, -0.7, Math.PI + 1.4);
+    ctx.strokeStyle = trim;
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    const glow = ctx.createRadialGradient(60, 26, 2, 60, 26, 32);
+    glow.addColorStop(0, (profile.glow || color) + "88");
+    glow.addColorStop(1, (profile.glow || color) + "00");
+    ellipse(ctx, 60, 26, 32, 32, glow);
+    polygon(
+      ctx,
+      [
+        [60, 7],
+        [73, 25],
+        [60, 47],
+        [48, 25],
+      ],
+      color,
+      "#e8dfb8",
+      1.5,
+    );
+    polygon(
+      ctx,
+      [
+        [60, 9],
+        [61, 42],
+        [49, 25],
+      ],
+      shade(color, 24),
+    );
+    ellipse(ctx, 57, 18, 3, 5, "#f1e6c6a0");
+    grip.y = 0.7;
+  } else if (model === "orb") {
+    const glow = ctx.createRadialGradient(60, 92, 1, 60, 92, 51);
+    glow.addColorStop(0, (profile.glow || color) + "99");
+    glow.addColorStop(1, (profile.glow || color) + "00");
+    ellipse(ctx, 60, 92, 51, 51, glow);
+    ellipse(ctx, 60, 92, 29, 30, trim);
+    ellipse(ctx, 60, 92, 24, 25, color);
+    ellipse(ctx, 52, 82, 10, 8, shade(color, 41));
+    ellipse(ctx, 48, 77, 4, 4, "#f0e9d6");
+    grip.y = 0.48;
+  } else if (model === "quiver") {
+    polygon(
+      ctx,
+      [
+        [43, 43],
+        [76, 44],
+        [81, 161],
+        [51, 175],
+      ],
+      shade(color, -25),
+      trim,
+      2,
+    );
+    for (let i = 0; i < 5; i++) {
+      line(ctx, 45 + i * 7, 19 + (i % 2) * 9, 51 + i * 5, 71, "#aaa185", 3);
+      polygon(
+        ctx,
+        [
+          [45 + i * 7, 17 + (i % 2) * 9],
+          [38 + i * 7, 25 + (i % 2) * 9],
+          [46 + i * 7, 40 + (i % 2) * 9],
+          [52 + i * 7, 26 + (i % 2) * 9],
+        ],
+        trim,
+      );
+    }
+    line(ctx, 42, 52, 76, 61, trim, 3);
+    line(ctx, 49, 140, 80, 139, trim, 2);
+    grip.y = 0.5;
+  } else {
+    const short = model === "dagger",
+      tip = short ? 62 : 8;
+    line(ctx, 60, 140, 60, 182, "#4f493a", 11);
+    line(ctx, 57, 141, 57, 181, shade(trim, -25), 2);
+    for (let i = 0; i < 6; i++)
+      line(ctx, 54, 146 + i * 5, 65, 143 + i * 5, trim, 1);
+    if (model === "glaive")
+      polygon(
+        ctx,
+        [
+          [56, 139],
+          [53, 27],
+          [73, 8],
+          [97, 38],
+          [82, 68],
+          [66, 79],
+          [68, 139],
+        ],
+        metal,
+        shade(color, -44),
+        1.4,
+      );
+    else if (model === "spear") {
+      line(ctx, 60, 51, 60, 183, shade(trim, -28), 7);
+      polygon(
+        ctx,
+        [
+          [60, 5],
+          [74, 42],
+          [60, 65],
+          [49, 42],
+        ],
+        metal,
+        shade(color, -39),
+        1.4,
+      );
+    } else if (profile.type === "saber" || profile.type === "cleaver") {
+      ctx.beginPath();
+      ctx.moveTo(55, 139);
+      ctx.quadraticCurveTo(42, 74, 68, tip);
+      ctx.quadraticCurveTo(76, 94, 68, 139);
+      ctx.closePath();
+      ctx.fillStyle = metal;
+      ctx.fill();
+      ctx.strokeStyle = shade(color, -35);
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+    } else
+      polygon(
+        ctx,
+        [
+          [54, 139],
+          [51, tip + 22],
+          [60, tip],
+          [69, tip + 22],
+          [67, 139],
+        ],
+        metal,
+        shade(color, -43),
+        1.2,
+      );
+    line(ctx, 61, tip + 15, 61, 130, "#f3efdfc0", 1.3);
+    line(ctx, 40, 140, 79, 140, trim, 6);
+    polygon(
+      ctx,
+      [
+        [40, 136],
+        [43, 146],
+        [48, 143],
+        [70, 143],
+        [77, 148],
+        [81, 135],
+      ],
+      trim,
+      shade(trim, -37),
+      1,
+    );
+    ellipse(ctx, 60, 183, 7, 6, trim);
+    ellipse(ctx, 60, 140, 4, 4, color);
+  }
+  return { texture: Texture.from(canvas), grip, model };
+}
+
+function materialTexture(texture, profile = {}) {
+  try {
+    const frame = texture.frame,
+      image = texture.source.resource;
+    const ratio = Math.min(1, 384 / Math.max(frame.width, frame.height));
+    const [canvas, ctx] = makeCanvas(frame.width * ratio, frame.height * ratio);
+    ctx.drawImage(
+      image,
+      frame.x,
+      frame.y,
+      frame.width,
+      frame.height,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const parse = (value) => {
+      const n = parseInt(String(value || "#aeb9b0").replace("#", ""), 16);
+      return [n >> 16, (n >> 8) & 255, n & 255];
+    };
+    const base = parse(profile.color),
+      trim = parse(profile.trim || "#d6b879");
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      const r = pixels.data[i],
+        g = pixels.data[i + 1],
+        b = pixels.data[i + 2];
+      if (!pixels.data[i + 3]) continue;
+      const luminance = 0.25 * r + 0.58 * g + 0.17 * b;
+      const gold = r > g * 1.06 && g > b * 1.15 && g > r * 0.57;
+      const target = gold ? trim : base;
+      const light = 0.3 + (luminance / 255) * 1.65,
+        highlight = clamp((luminance - 183) / 90, 0, 0.7);
+      for (let c = 0; c < 3; c++)
+        pixels.data[i + c] = clamp(
+          target[c] * light * (1 - highlight) + 245 * highlight,
+          0,
+          255,
+        );
+    }
+    ctx.putImageData(pixels, 0, 0);
+    return Texture.from(canvas);
+  } catch {
+    return texture;
+  }
+}
+
 function vignetteTexture() {
   const [canvas, ctx] = makeCanvas(1024, 768);
   const grad = ctx.createRadialGradient(460, 340, 170, 512, 384, 670);
@@ -1450,6 +1809,8 @@ export class GameRenderer {
     this.assets = new Map();
     this.art = {};
     this.characterArt = {};
+    this.equipmentArt = {};
+    this.equipmentBoots = [];
     this.scenery = [];
     this.pointer = null;
     this.clock = 0;
@@ -1479,23 +1840,33 @@ export class GameRenderer {
     );
     container.appendChild(this.app.canvas);
     const loaded = await Promise.allSettled(
-      ["temple", "tree", "hero", "gate", "pheasant", "characters"].map(
-        async (name) => {
-          const filename =
-            name === "tree"
-              ? "tree-v2"
-              : name === "characters"
-                ? "characters-v2"
-                : name;
-          const texture = await Assets.load(
-            `${import.meta.env.BASE_URL}art/${filename}.png`,
-          );
-          return {
-            name,
-            texture: name === "characters" ? texture : frameArtwork(texture),
-          };
-        },
-      ),
+      [
+        "temple",
+        "tree",
+        "hero",
+        "gate",
+        "pheasant",
+        "characters",
+        "body",
+        "equipment",
+      ].map(async (name) => {
+        const filename =
+          name === "tree"
+            ? "tree-v2"
+            : name === "characters"
+              ? "characters-v2"
+              : name;
+        const texture = await Assets.load(
+          `${import.meta.env.BASE_URL}art/${filename}.png`,
+        );
+        return {
+          name,
+          texture:
+            name === "characters" || name === "equipment"
+              ? texture
+              : frameArtwork(texture),
+        };
+      }),
     );
     for (const result of loaded)
       if (result.status === "fulfilled")
@@ -1514,6 +1885,27 @@ export class GameRenderer {
             atlas,
             new Rectangle(x, y, right - x, bottom - y),
           );
+        },
+      );
+    }
+    if (this.art.equipment) {
+      const atlas = this.art.equipment;
+      ["armor", "helmet", "boots", "garment", "sword", "shield"].forEach(
+        (slot, index) => {
+          const col = index % 3,
+            row = Math.floor(index / 3);
+          const x = Math.round((col * atlas.width) / 3),
+            y = Math.round((row * atlas.height) / 2);
+          const right = Math.round(((col + 1) * atlas.width) / 3),
+            bottom = Math.round(((row + 1) * atlas.height) / 2);
+          const frame = frameArtwork(
+            atlas,
+            new Rectangle(x, y, right - x, bottom - y),
+          );
+          this.equipmentArt[slot] =
+            slot === "boots" ? frame : equipmentComponents(frame)[0] || frame;
+          if (slot === "boots")
+            this.equipmentBoots = equipmentComponents(frame, 2);
         },
       );
     }
@@ -2059,6 +2451,297 @@ export class GameRenderer {
     }
   }
 
+  createModularAvatar(entity) {
+    const sprite = new Container();
+    sprite.sortableChildren = true;
+    const body = new Sprite(
+      this.art.body || this.characterArt[entity.classId] || this.art.hero,
+    );
+    body.anchor.set(0.5, 0.995);
+    body.scale.set(117 / body.texture.height);
+    body.zIndex = 10;
+    const aura = new Graphics();
+    aura.zIndex = -5;
+    sprite.addChild(aura, body);
+    const layers = {};
+    for (const [slot, z] of [
+      ["garment", 0],
+      ["boots", 20],
+      ["bootBack", 20],
+      ["bootFront", 21],
+      ["armor", 30],
+      ["helmet", 40],
+      ["weapon", 50],
+      ["offhand", 51],
+      ["dual", 49],
+    ]) {
+      const layer = new Sprite(Texture.EMPTY);
+      layer.zIndex = z;
+      layer.visible = false;
+      sprite.addChild(layer);
+      layers[slot] = layer;
+    }
+    const jewel = new Graphics();
+    jewel.zIndex = 42;
+    sprite.addChild(jewel);
+    return {
+      sprite,
+      visual: { body, layers, aura, jewel, signature: null, gear: {} },
+    };
+  }
+
+  updateModularAvatar(record, entity) {
+    const visual = record.visual;
+    if (!visual) return;
+    const slots = [
+      "weapon",
+      "offhand",
+      "armor",
+      "helmet",
+      "boots",
+      "garment",
+      "ring",
+      "necklace",
+    ];
+    const gear = {};
+    for (const slot of slots) {
+      const equipped = entity.equipment?.[slot];
+      gear[slot] =
+        typeof equipped === "object"
+          ? equipped
+          : entity.inventory?.find((item) => item.id === equipped);
+    }
+    const signature = JSON.stringify(
+      slots.map((slot) => [
+        slot,
+        gear[slot]?.id,
+        gear[slot]?.plus,
+        gear[slot]?.appearance,
+      ]),
+    );
+    if (signature !== visual.signature) {
+      visual.signature = signature;
+      visual.gear = gear;
+      for (const slot of [
+        "garment",
+        "boots",
+        "bootBack",
+        "bootFront",
+        "armor",
+        "helmet",
+        "weapon",
+        "offhand",
+        "dual",
+      ])
+        visual.layers[slot].visible = false;
+      const piece = (slot, profile, item, sourceOverride) => {
+        const source = sourceOverride || this.equipmentArt[slot];
+        if (!source) return null;
+        return this.asset(
+          `material:${slot}:${source.uid}:${JSON.stringify(profile)}`,
+          () => materialTexture(source, profile),
+        );
+      };
+      const fit = (slot, texture, height, x, y, anchorX = 0.5, anchorY = 0) => {
+        if (!texture) return null;
+        const layer = visual.layers[slot];
+        layer.texture = texture;
+        layer.anchor.set(anchorX, anchorY);
+        layer.scale.set(height / texture.height);
+        layer.position.set(x, y);
+        layer.rotation = 0;
+        layer.tint = 0xffffff;
+        layer.zIndex = slot === "offhand" ? 51 : layer.zIndex;
+        layer.visible = true;
+        return layer;
+      };
+      for (const slot of ["garment", "armor", "helmet", "boots"]) {
+        const item = gear[slot];
+        if (!item) continue;
+        const profile = item.appearance || {
+          color: slot === "garment" ? "#b84548" : "#859a85",
+          trim: "#d6bd80",
+        };
+        const texture = piece(slot, profile, item);
+        if (slot === "garment") fit(slot, texture, 87, -10, -96, 0.48, 0);
+        if (slot === "armor")
+          fit(
+            slot,
+            texture,
+            profile.model === "heavy-armor" ? 47 : 43,
+            0,
+            -92,
+            0.5,
+            0,
+          );
+        if (slot === "helmet") fit(slot, texture, 34, 1, -89, 0.5, 1);
+        if (slot === "boots") {
+          if (this.equipmentBoots.length === 2) {
+            const back = fit(
+              "bootBack",
+              piece(slot, profile, item, this.equipmentBoots[1]),
+              27,
+              -14,
+              -18,
+              0.5,
+              0.98,
+            );
+            if (back) back.scale.x *= -1;
+            fit(
+              "bootFront",
+              piece(slot, profile, item, this.equipmentBoots[0]),
+              30,
+              17,
+              1,
+              0.5,
+              0.98,
+            );
+          } else {
+            const layer = fit(slot, texture, 32, 1, 1, 0.5, 1);
+            if (layer) {
+              layer.scale.x *= -1;
+              layer.rotation = 0.23;
+            }
+          }
+        }
+      }
+      const held = (slot, item, x, y, offhand = false) => {
+        if (!item) return null;
+        const profile = item.appearance || {
+          model: "sword",
+          color: "#bcc8c0",
+          trim: "#d7ba75",
+        };
+        const model = profile.model || "sword";
+        if (model === "shield")
+          return fit(slot, piece("shield", profile, item), 43, x, y, 0.5, 0.5);
+        let design;
+        if (
+          model === "sword" &&
+          profile.type !== "cleaver" &&
+          this.equipmentArt.sword
+        ) {
+          design = {
+            texture: piece("sword", profile, item),
+            grip: { x: 0.22, y: 0.75 },
+            model,
+          };
+        } else
+          design = this.asset(`held:${JSON.stringify(profile)}`, () =>
+            weaponLayerTexture(profile),
+          );
+        const height =
+          model === "orb"
+            ? 46
+            : model === "quiver"
+              ? 53
+              : model === "dagger"
+                ? 57
+                : model === "wand"
+                  ? 69
+                  : model === "bow"
+                    ? 84
+                    : model === "staff"
+                      ? 108
+                      : model === "spear"
+                        ? 114
+                        : model === "glaive"
+                          ? 105
+                          : 80;
+        const layer = fit(
+          slot,
+          design.texture,
+          height,
+          x,
+          y,
+          design.grip.x,
+          design.grip.y,
+        );
+        if (layer) {
+          layer.rotation = offhand
+            ? -0.28
+            : model === "staff" || model === "spear"
+              ? -0.07
+              : model === "bow"
+                ? -0.15
+                : this.equipmentArt.sword && model === "sword"
+                  ? -0.27
+                  : 0.2;
+          if (offhand && model === "sword" && this.equipmentArt.sword)
+            layer.scale.x *= -1;
+          layer.restRotation = layer.rotation;
+          if (model === "quiver") {
+            layer.position.set(-19, -77);
+            layer.zIndex = 5;
+            layer.rotation = -0.2;
+          }
+        }
+        return layer;
+      };
+      held("weapon", gear.weapon, 21, -48);
+      held("offhand", gear.offhand, -22, -59, true);
+      if (gear.weapon?.appearance?.grip === "dual" && !gear.offhand)
+        held("dual", gear.weapon, -22, -59, true);
+    }
+    const time = this.clock,
+      moving = record.moving || 0;
+    const cape = visual.layers.garment;
+    cape.rotation = Math.sin(time * 3.1 + entity.x) * (0.018 + moving * 0.045);
+    cape.skew.x = Math.sin(time * 4 + entity.y) * moving * 0.045;
+    visual.layers.weapon.rotation =
+      (visual.layers.weapon.restRotation || 0) +
+      Math.sin(time * 4) * moving * 0.035;
+    visual.aura.clear();
+    visual.jewel.clear();
+    const necklace = visual.gear.necklace;
+    if (necklace) {
+      const color = necklace.appearance?.color || "#9ccbb8",
+        trim = necklace.appearance?.trim || "#d4bc7b";
+      visual.jewel
+        .moveTo(-7, -86)
+        .lineTo(-2, -76)
+        .lineTo(5, -85)
+        .stroke({ color: trim, width: 0.7, alpha: 0.95 });
+      visual.jewel
+        .poly([-2, -79, 1, -76, -2, -72, -5, -76])
+        .fill({ color, alpha: 1 });
+    }
+    const glowing = Object.values(visual.gear).filter(
+      (item) => item?.appearance?.glow,
+    );
+    if (glowing.length) {
+      const glow = glowing[0].appearance.glow;
+      visual.aura.ellipse(0, -1, 23, 9).stroke({
+        color: glow,
+        width: 0.8,
+        alpha: 0.2 + Math.sin(time * 2) * 0.06,
+      });
+      for (let i = 0; i < 4; i++) {
+        const a = time * 0.7 + (i * Math.PI) / 2;
+        visual.aura
+          .circle(Math.cos(a) * 21, -47 + Math.sin(a) * 30, 1)
+          .fill({ color: glow, alpha: 0.3 + Math.sin(time * 2 + i) * 0.13 });
+      }
+    }
+  }
+
+  equipmentPreview(player) {
+    try {
+      const record = this.entities.get(`player:${player.id}`);
+      if (!record?.visual || !this.app) return null;
+      this.updateModularAvatar(record, player);
+      return this.app.renderer.extract
+        .canvas({
+          target: record.sprite,
+          resolution: 3,
+          clearColor: 0x00000000,
+        })
+        .toDataURL("image/png");
+    } catch {
+      return null;
+    }
+  }
+
   drawEntity(entity, kind, selfId, selected, hovered, seen) {
     const key = `${kind}:${entity.id}`;
     seen.add(key);
@@ -2068,6 +2751,7 @@ export class GameRenderer {
       sy = p.y + this.screenOffset.y;
     const visible =
       sx > -90 && sx < this.width + 90 && sy > -10 && sy < this.height + 150;
+    const modular = kind === "player" && Boolean(this.art.body);
     let record = this.entities.get(key);
     const facing = entity.direction ?? entity.facing ?? 0;
     let textureKey;
@@ -2113,17 +2797,19 @@ export class GameRenderer {
                   ),
           ));
     if (!record) {
-      const sprite = new Sprite(texture);
-      sprite.anchor.set(
-        artworkHero ? (this.characterArt[humanoidClass] ? 0.5 : 0.54) : 0.5,
-        artworkHero || artworkBird
-          ? 0.995
-          : kind === "drop"
-            ? 0.83
-            : textureKey === "pheasant"
-              ? 0.93
-              : 0.94,
-      );
+      const avatar = modular ? this.createModularAvatar(entity) : null;
+      const sprite = avatar?.sprite || new Sprite(texture);
+      if (!modular)
+        sprite.anchor.set(
+          artworkHero ? (this.characterArt[humanoidClass] ? 0.5 : 0.54) : 0.5,
+          artworkHero || artworkBird
+            ? 0.995
+            : kind === "drop"
+              ? 0.83
+              : textureKey === "pheasant"
+                ? 0.93
+                : 0.94,
+        );
       const style = {
         fontFamily: "Trebuchet MS,Arial,sans-serif",
         fontSize: kind === "player" ? 11 : 10,
@@ -2148,6 +2834,7 @@ export class GameRenderer {
       this.labels.addChild(label);
       record = {
         sprite,
+        visual: avatar?.visual,
         label,
         x: position.x,
         y: position.y,
@@ -2161,7 +2848,7 @@ export class GameRenderer {
     record.sprite.visible = visible && entity.hp !== 0;
     record.label.visible = visible && entity.hp !== 0;
     if (!visible || entity.hp === 0) return;
-    if (record.textureKey !== textureKey) {
+    if (!modular && record.textureKey !== textureKey) {
       record.sprite.texture = texture;
       record.textureKey = textureKey;
     }
@@ -2179,24 +2866,27 @@ export class GameRenderer {
         record.moving *
         1.8
       : 0;
-    const scale = artworkHero
-      ? (kind === "npc" ? 108 : kind === "enemy" ? 110 : 117) / texture.height
-      : artworkBird
-        ? 57 / texture.height
-        : kind === "drop"
-          ? 0.7
-          : textureKey === "pheasant"
-            ? 0.68
-            : kind === "enemy"
-              ? 0.81
-              : kind === "npc"
-                ? 0.86
-                : 0.9;
+    if (modular) this.updateModularAvatar(record, entity);
+    const scale = modular
+      ? 1
+      : artworkHero
+        ? (kind === "npc" ? 108 : kind === "enemy" ? 110 : 117) / texture.height
+        : artworkBird
+          ? 57 / texture.height
+          : kind === "drop"
+            ? 0.7
+            : textureKey === "pheasant"
+              ? 0.68
+              : kind === "enemy"
+                ? 0.81
+                : kind === "npc"
+                  ? 0.86
+                  : 0.9;
     record.sprite.scale.set(
       scale * ((artworkHero || artworkBird) && facing >= 4 ? -1 : 1),
       scale,
     );
-    if (artworkHero) {
+    if (artworkHero && !modular) {
       const tints = {
         trojan: 0xffffff,
         warrior: 0xd7e4ec,
@@ -2262,8 +2952,9 @@ export class GameRenderer {
         6 * shadowScale,
       )
       .fill({ color: 0x30493a, alpha: 0.19 - position.lift / 700 });
-    const nameHeight =
-      artworkHero || artworkBird
+    const nameHeight = modular
+      ? 127
+      : artworkHero || artworkBird
         ? texture.height * scale + 9
         : textureKey === "pheasant"
           ? 52

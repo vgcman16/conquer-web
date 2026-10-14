@@ -4,7 +4,7 @@ Reviewed October 14, 2026. The supplied PDF, _Conquer Online Clean-Room Reconstr
 
 ## Two distinct source baselines
 
-The pasted blueprint favors patches 5017/5065 and historical protocol compatibility. The PDF instead identifies live patch 7961 at its research cutoff, refers to patch 5517 for technical evidence, recommends Blender/glTF/Godot, and favors a new network protocol. Those choices describe different products. This repository deliberately starts with a **classic-inspired browser ruleset**, four classic class families with separate Fire/Water Taoist choices, original procedural art, and a browser-native server. It does not claim exact compatibility with any historical client patch.
+The pasted blueprint favors patches 5017/5065 and historical protocol compatibility. The PDF instead identifies live patch 7961 at its research cutoff, refers to patch 5517 for technical evidence, recommends Blender/glTF/Godot, and favors a new network protocol. Those choices describe different products. This repository deliberately starts with a **classic-inspired browser ruleset**, four classic class families with separate Fire/Water Taoist choices, original generated artwork and procedural terrain, and a browser-native server. It does not claim exact compatibility with any historical client patch.
 
 In particular, the PDF's page 20 explicitly says a 2:1 isometric transform does not establish an original universal 64 × 32 pixel cell size. That size is this project's rendering choice. Skill coefficients, stamina costs, timing, experience curves, drop rates, and quest rewards in the prototype are project balance values until measured against a pinned reference.
 
