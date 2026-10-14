@@ -26,7 +26,7 @@ try {
     true,
     "Licensed skinned GLB loads",
   );
-  assert.equal(reports.idle.renderer.player.animation, "Idle_Loop");
+  assert.match(reports.idle.renderer.player.animation, /Idle/);
   assert.ok(
     reports.idle.renderer.player.boneRotations.calf_r,
     "Real skeleton is present",

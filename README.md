@@ -6,6 +6,12 @@ A playable browser prototype inspired by classic Conquer Online: a fully 3D city
 
 This is the first playable slice of a larger reconstruction. It uses project balance values and a new web protocol; it does not yet implement an exact historical patch, original client file import, persistent accounts, rebirth, guilds or production MMO scale.
 
+## Visuals
+
+The city uses slate causeways, dark tiled roofs, layered martial halls, carved guardians and hanging banners. The character wardrobe adds original modeled breastplates, overlapping lamellae, dragon shoulders, bracers, greaves, coronets and decorated weapons. Taoist outfits use longer robe panels; equipped capes use animated brocade cloth with a separate lining.
+
+This metalwork is procedural Three.js geometry attached to the licensed Quaternius CC0 animated base. The base retains its 65-bone rig and twelve clips; all eight equipment slots remain independent. The slate and dragon-brocade materials were generated for this project. [Art direction and official visual references](docs/art-direction.md) distinguish these contributions from the [CC0 model sources](docs/model-assets.md).
+
 ## Run locally
 
 Use Node.js 22.12 or newer.

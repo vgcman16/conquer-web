@@ -3,6 +3,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { zoneDefs } from "../shared/world.js";
 import { createEnvironment } from "./world3d.js";
+import { createPresentation } from "./presentation3d.js";
+import { dressMartialCharacter, createMartialWeapon } from "./wardrobe3d.js";
 
 const TAU = Math.PI * 2;
 const clamp = THREE.MathUtils.clamp;
@@ -839,6 +841,17 @@ function makeHumanoid(player = {}, kind = "player") {
     cape: null,
     licensed: true,
   };
+  rig.wardrobe = dressMartialCharacter({
+    model,
+    bones,
+    nodes,
+    player,
+    kind,
+    armor,
+    boots,
+    helmet,
+    garment,
+  });
   const weaponDesc =
     appearance(player, "weapon") ||
     (kind !== "player"
@@ -863,7 +876,7 @@ function makeHumanoid(player = {}, kind = "player") {
     const handMount = group(right);
     handMount.rotation.x = Math.PI * 0.5;
     handMount.scale.setScalar(0.66);
-    const weapon = makeWeapon(handMount, weaponDesc);
+    const weapon = createMartialWeapon(handMount, weaponDesc);
     weapon.position.set(0, 0.01, 0.02);
     rig.weapon = weapon;
   }
@@ -875,7 +888,7 @@ function makeHumanoid(player = {}, kind = "player") {
     const mount = group(left);
     mount.rotation.x = Math.PI * 0.5;
     mount.scale.setScalar(0.66);
-    makeBlade(mount, off || weaponDesc, !!off);
+    createMartialWeapon(mount, off || weaponDesc);
   }
   if (left && off?.model === "shield") {
     const mount = group(left, 0, 0.02, -0.06);
@@ -919,42 +932,6 @@ function makeHumanoid(player = {}, kind = "player") {
         0.006,
       );
   }
-  if (head && helmet) {
-    const hm = material(helmet.color || "#b38b58", 0.7, 0.35),
-      tm = material(helmet.trim || "#dec382", 0.75, 0.3);
-    // The fitted headpiece is independently equipped in addition to the tailored hood.
-    const mount = group(head);
-    mesh(
-      mount,
-      lathe([
-        [0.115, 0.02],
-        [0.12, 0.075],
-        [0.085, 0.115],
-      ]),
-      hm,
-      0,
-      0,
-      0.005,
-      1,
-      1,
-      0.9,
-    );
-    mesh(
-      mount,
-      lathe([
-        [0.12, 0.027],
-        [0.125, 0.04],
-        [0.12, 0.05],
-      ]),
-      tm,
-      0,
-      0,
-      0.005,
-      1,
-      1,
-      0.9,
-    );
-  }
   const necklace = appearance(player, "necklace");
   if (chest && necklace) {
     const nm = material(necklace.trim || "#cfac6e", 0.7, 0.35);
@@ -988,27 +965,6 @@ function makeHumanoid(player = {}, kind = "player") {
     ).rotation.x = Math.PI * 0.5;
     mesh(mount, new THREE.OctahedronGeometry(0.01), gemMat, 0, 0, 0.017);
   }
-  if (chest && garment) {
-    const geometry = new THREE.PlaneGeometry(0.63, 1.05, 12, 18),
-      cape = mesh(
-        chest,
-        geometry,
-        material(garment.color || "#a64e48", 0, 0.88, {
-          side: THREE.DoubleSide,
-        }),
-        0,
-        -0.37,
-        -0.18,
-      );
-    rig.cape = { mesh: cape, base: geometry.attributes.position.array.slice() };
-    rod(
-      chest,
-      material(garment.trim || "#c5a66b", 0.5, 0.55),
-      [-0.2, 0.07, 0.13],
-      [0.2, 0.07, 0.13],
-      0.014,
-    );
-  }
   setAnimation(rig, "Idle_Loop", 0);
   mixer.update(Math.random() * 1.5);
   return rig;
@@ -1040,13 +996,24 @@ function makeBird() {
     cream = material("#d9b77e"),
     red = material("#a54c3c"),
     dark = material("#282c24"),
+    emerald = material("#235d4a", 0.22, 0.43),
+    collar = material("#e2d7b7"),
     bronze = material("#977443");
   ellipsoid(body, brown, 0, 0, 0, 0.28, 0.29, 0.42);
   ellipsoid(body, cream, 0, 0.04, 0.27, 0.21, 0.26, 0.2);
   const neck = group(body, 0, 0.19, 0.28),
     head = group(neck, 0, 0.19, 0.04);
-  ellipsoid(neck, brown, 0, 0, 0, 0.11, 0.21, 0.12);
-  ellipsoid(head, brown, 0, 0, 0, 0.14, 0.15, 0.15);
+  ellipsoid(neck, emerald, 0, 0, 0, 0.105, 0.21, 0.115);
+  const neckRing = mesh(
+    neck,
+    new THREE.TorusGeometry(0.105, 0.022, 6, 28),
+    collar,
+    0,
+    0.075,
+    0,
+  );
+  neckRing.rotation.x = Math.PI / 2;
+  ellipsoid(head, emerald, 0, 0, 0, 0.13, 0.14, 0.145);
   const beak = mesh(
     head,
     new THREE.ConeGeometry(0.055, 0.19, 6),
@@ -1056,19 +1023,21 @@ function makeBird() {
     0.19,
   );
   beak.rotation.x = Math.PI * 0.5;
-  for (const side of [-1, 1])
+  for (const side of [-1, 1]) {
+    ellipsoid(head, red, side * 0.118, 0.015, 0.055, 0.023, 0.058, 0.065);
     ellipsoid(head, dark, side * 0.115, 0.028, 0.07, 0.024, 0.024, 0.024);
-  for (let i = 0; i < 3; i++)
-    ellipsoid(
+    const ear = ellipsoid(
       head,
-      red,
-      0,
-      0.14 + Math.sin(i) * 0.015,
-      -0.06 + i * 0.06,
-      0.035,
-      0.06,
-      0.035,
+      dark,
+      side * 0.065,
+      0.12,
+      -0.065,
+      0.025,
+      0.085,
+      0.03,
     );
+    ear.rotation.x = -0.4;
+  }
   const wings = [],
     legs = [];
   for (const side of [-1, 1]) {
@@ -1102,10 +1071,10 @@ function makeBird() {
       i % 2 ? wingMat : brown,
       i * 0.045,
       0.07,
-      -0.23,
-      0.055,
-      0.05,
-      0.42,
+      -0.43,
+      0.04,
+      0.035,
+      0.64 - Math.abs(i) * 0.075,
     );
     feather.rotation.y = i * 0.12;
   }
@@ -1153,7 +1122,7 @@ export class GameRenderer {
     this.pointer = null;
     this.lastState = null;
     this.cameraReady = false;
-    this.zoom = 1;
+    this.zoom = 1.22;
     this.raycaster = new THREE.Raycaster();
     this.ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     this.target = new THREE.Vector3(24, 0, 24);
@@ -1184,10 +1153,11 @@ export class GameRenderer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.info.autoReset = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.13;
-    this.renderer.setClearColor("#b6c1ac");
+    this.renderer.toneMappingExposure = 1.04;
+    this.renderer.setClearColor("#899caa");
     this.canvas = this.renderer.domElement;
     this.canvas.style.cssText =
       "display:block;width:100%;height:100%;touch-action:none";
@@ -1207,14 +1177,14 @@ export class GameRenderer {
     };
     this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color("#b8c2ac");
-    this.scene.fog = new THREE.Fog("#b8c2ac", 82, 132);
+    this.scene.background = new THREE.Color("#899caa");
+    this.scene.fog = new THREE.Fog("#899caa", 88, 150);
     this.camera = new THREE.OrthographicCamera(-10, 10, 10, -10, 0.1, 180);
-    this.scene.add(new THREE.HemisphereLight("#dce9ec", "#867c59", 2.0));
-    const fill = new THREE.DirectionalLight("#c0d8e5", 0.55);
+    this.scene.add(new THREE.HemisphereLight("#c6d4e5", "#756455", 1.85));
+    const fill = new THREE.DirectionalLight("#c6d5ed", 0.95);
     fill.position.set(-15, 12, 5);
     this.scene.add(fill);
-    this.sun = new THREE.DirectionalLight("#fff0d1", 3.2);
+    this.sun = new THREE.DirectionalLight("#ffd6a0", 3.8);
     this.sun.position.set(12, 30, 4);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -1244,6 +1214,11 @@ export class GameRenderer {
     this.labels.style.cssText =
       "position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2";
     container.appendChild(this.labels);
+    this.presentation = createPresentation(
+      this.renderer,
+      this.scene,
+      this.camera,
+    );
     this.resize();
   }
   makeRing(c, radius, width) {
@@ -1274,6 +1249,7 @@ export class GameRenderer {
     this.camera.top = this.height / scale / 2;
     this.camera.bottom = -this.height / scale / 2;
     this.camera.updateProjectionMatrix();
+    this.presentation?.resize(this.width, this.height);
   }
   rebuildZone(zone) {
     this.environment?.dispose?.();
@@ -1493,7 +1469,12 @@ export class GameRenderer {
             : speed > 6
               ? "Sprint_Loop"
               : "Jog_Fwd_Loop";
-      else animation = "Idle_Loop";
+      else
+        animation =
+          record.kind === "player" &&
+          ["sword", "dagger", "glaive", "spear"].includes(rig.weaponDesc?.model)
+            ? "Sword_Idle"
+            : "Idle_Loop";
       setAnimation(
         rig,
         animation,
@@ -1512,6 +1493,7 @@ export class GameRenderer {
       if (action && animation === "Jump_Land")
         action.setEffectiveTimeScale(action.getClip().duration / 0.27);
       rig.mixer.update(dt);
+      rig.wardrobe?.update(this.clock, record.motion);
       rig.animationTime = action?.time || 0;
       if (rig.cape) {
         const pos = rig.cape.mesh.geometry.attributes.position,
@@ -1672,7 +1654,7 @@ export class GameRenderer {
     this.camera.position.copy(focus).add(new THREE.Vector3(40, 32.66, 40));
     this.camera.lookAt(focus);
     this.camera.updateMatrixWorld();
-    this.sun.position.set(this.target.x - 12, 30, this.target.z - 8);
+    this.sun.position.set(this.target.x - 18, 26, this.target.z - 14);
     this.sun.target.position.copy(this.target);
     this.sun.target.updateMatrixWorld();
     this.environment?.update?.(this.clock, actual);
@@ -1696,6 +1678,8 @@ export class GameRenderer {
         }
         if (!record) record = this.makeEntity(entity, kind);
         record.rig.root.visible = true;
+        if (record.label.title.textContent !== entity.name)
+          record.label.title.textContent = entity.name || "Wanderer";
         this.updateRig(record, entity, dt, state);
         const p = this.entityPosition(entity),
           screen = this.worldToScreen(
@@ -1742,7 +1726,10 @@ export class GameRenderer {
       this.pointerRing.position.set(p.x, 0.032, p.y);
     }
     this.drawEffects(list(state.effects), state.time ?? 0);
-    if (renderNow) this.renderer.render(this.scene, this.camera);
+    if (renderNow) {
+      this.renderer.info.reset();
+      this.presentation.render(dt);
+    }
   }
   drawEffects(effects, time) {
     const seen = new Set();
@@ -1890,7 +1877,13 @@ export class GameRenderer {
     scene.add(rig.root);
     rig.root.rotation.y = -0.35;
     if (rig.licensed) {
-      setAnimation(rig, "Idle_Loop", 0);
+      setAnimation(
+        rig,
+        ["sword", "dagger", "glaive", "spear"].includes(rig.weaponDesc?.model)
+          ? "Sword_Idle"
+          : "Idle_Loop",
+        0,
+      );
       rig.mixer.update(0.4);
     }
     scene.add(new THREE.HemisphereLight("#edf4ef", "#687563", 2.8));
@@ -1967,6 +1960,7 @@ export class GameRenderer {
     };
   }
   destroy() {
+    this.presentation?.dispose();
     this.environment?.dispose?.();
     for (const e of this.entities.values()) {
       disposeObject(e.rig.root, true);
