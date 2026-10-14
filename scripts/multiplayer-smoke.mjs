@@ -7,7 +7,10 @@ const base = process.env.PREVIEW_URL || "http://127.0.0.1:5173";
 const realm = process.env.REALM_URL || "ws://127.0.0.1:8787";
 const output = path.resolve("artifacts");
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  channel: process.env.BROWSER_CHANNEL || undefined,
+  headless: process.env.BROWSER_HEADED !== "1",
+});
 const errors = [],
   reports = [],
   issues = [];
@@ -83,16 +86,20 @@ async function aimLogical(
   const state = await gameState(page);
   const canvas = await page.locator("#game canvas").boundingBox();
   assert.ok(canvas);
+  const p = state.renderer.projection;
+  assert.ok(p, "Renderer reports its actual camera projection");
   const screen = {
     x:
       canvas.x +
-      canvas.width / 2 +
-      (x - state.player.x - (y - state.player.y)) * 32,
+      p.origin.x +
+      x * (p.x.x - p.origin.x) +
+      y * (p.y.x - p.origin.x),
     y:
       canvas.y +
-      canvas.height * 0.56 +
-      (x - state.player.x + (y - state.player.y)) * 16 -
-      (entity ? 28 : 0),
+      p.origin.y +
+      x * (p.x.y - p.origin.y) +
+      y * (p.y.y - p.origin.y) +
+      (entity ? 1.4 * (p.elevation.y - p.origin.y) : 0),
   };
   assert.ok(
     screen.x >= canvas.x &&

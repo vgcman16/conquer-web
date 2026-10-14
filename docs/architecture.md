@@ -1,13 +1,13 @@
 # Technical architecture
 
-The first slice is a browser-native, classic-inspired isometric action RPG. It keeps the playable world model independent of rendering so the same rules can run in a local solo session or an authoritative Node server. Art and world layouts are created for this project. Historical client interoperability is a later, isolated capability.
+The first slice is a browser-native, classic-inspired 3D action RPG viewed through an isometric camera. It keeps the playable world model independent of rendering so the same rules can run in a local solo session or an authoritative Node server. The world is authored for this project; its rigged humanoid uses licensed CC0 assets. Historical client interoperability is a later, isolated capability.
 
 ## Runtime boundary
 
 ```mermaid
 flowchart LR
   Input[Pointer and keyboard] --> Client[Browser client]
-  Client --> View[PixiJS world and DOM interface]
+  Client --> View[Three.js 3D world and DOM interface]
   Client --> Solo[Local shared simulation]
   Client -->|Player intents over WebSocket| Server[Node authoritative world]
   Server -->|World snapshots and events| Client
@@ -16,19 +16,20 @@ flowchart LR
   Rules --> Server
 ```
 
-| Layer               | Current role                                                                                                            | Extension boundary                                                     |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Browser application | Vite with JavaScript modules; input, HUD, inventory/NPC windows and session mode                                        | Typed interfaces, accessibility, mobile input                          |
-| `src/renderer.js`   | PixiJS v8; original generated art and procedural terrain, visible terrain chunks, isometric entities and visual effects | Remote chunk manifests, measured budgets, glTF characters              |
-| `shared/world.js`   | World creation, player commands, resource/combat rules and progression                                                  | Versioned ruleset data and deterministic replay fixtures               |
-| `server/index.js`   | Node `ws`; validates intents and advances the authoritative world                                                       | Persistent identities, transactions, interest management and instances |
-| Persistence         | Browser storage for a guest's solo progress                                                                             | Server-owned character/economy database and migrations                 |
+| Layer               | Current role                                                                                                                  | Extension boundary                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Browser application | Vite with JavaScript modules; input, HUD, inventory/NPC windows and session mode                                              | Typed interfaces, accessibility, mobile input                          |
+| `src/renderer3d.js` | Three.js WebGL renderer, orthographic camera, GLTFLoader, skeletal animation, modular equipment, selection and combat effects | Additional animation sets, material variants and measured GPU budgets  |
+| `src/world3d.js`    | Mesh terrain, architecture, foliage, water and ambient animation; static mesh merging and instancing                          | Content streaming, richer authored zones and scalable scene budgets    |
+| `shared/world.js`   | World creation, player commands, resource/combat rules and progression                                                        | Versioned ruleset data and deterministic replay fixtures               |
+| `server/index.js`   | Node `ws`; validates intents and advances the authoritative world                                                             | Persistent identities, transactions, interest management and instances |
+| Persistence         | Browser storage for a guest's solo progress                                                                                   | Server-owned character/economy database and migrations                 |
 
 The optional server owns multiplayer outcomes. A browser sends an action such as movement, jump, attack or inventory interaction; it does not supply final damage, loot or a replacement player state. Solo mode runs the same world rules locally and is a development/playability feature, not a multiplayer authority.
 
 ## Geometry and rendering
 
-Gameplay coordinates live in the map's logical cell space. The chosen 2:1 diamond projection uses 64 × 32 pixel cells before zoom:
+Gameplay coordinates live in the map's logical cell space. Logical `(x, y)` maps to Three.js `(x, 0, z)`; height occupies the renderer's Y axis. An orthographic camera looks diagonally across that plane, giving the world an isometric presentation with approximately 2:1 projected ground diamonds. The historical 64 × 32 pixel projection remains useful as a reference for the logical axes:
 
 ```text
 screenX = (worldX - worldY) * 32
@@ -38,17 +39,17 @@ worldX = screenX / 64 + screenY / 32
 worldY = screenY / 32 - screenX / 64
 ```
 
-Camera translation and zoom are applied after projection and removed before inverse projection. A click is resolved to logical coordinates before validating movement. The tile dimensions are this project's scale choice; they are not asserted to match every original client build.
+The active renderer projects world points through the Three.js camera and resolves pointer positions by raycasting onto the ground plane. Camera following and mouse-wheel zoom therefore do not change logical coordinates or collision. The projection and scale are project choices; they are not asserted to match every original client build.
 
-Jumping has a legal start and destination in world state. Rendering interpolates between projected endpoints and adds a visual parabola, `4 * apex * u * (1 - u)`. Visual height must never expand collision or attack range. Resource, destination and distance rules belong in shared simulation and are therefore enforceable by the server.
+Jumping has a legal start and destination in world state. Rendering interpolates between those endpoints, adds a vertical arc, and plays takeoff, airborne and landing skeletal clips. Visual height must never expand collision or attack range. Resource, destination and distance rules belong in shared simulation and are therefore enforceable by the server.
 
 The current two zones are 48 × 48 logical cells. Walking/running follows an eight-neighbor A* path with diagonal corner checks, then advances at 4.5/7.5 cells per second. Jumping costs 10 stamina, is limited to 16 cells, and takes `0.45 + distance * 0.012` seconds. A landing must be passable; sampled intermediate obstacles taller than the prototype's height threshold block the jump. These values are prototype rules. The runtime interpolates fractional positions along legal cell paths rather than preserving integer positions at every tick.
 
-Terrain and scenery are separate from entity state. The renderer builds visible 8 × 8 terrain chunks from original Canvas textures. It keeps visible chunks and evicts the least recently displayed hidden textures when the cache exceeds `max(90, visibleChunkCount)`. This bounds retained hidden chunks while allowing a large viewport to keep the terrain it needs. Objects are depth-sorted by their projected ground baseline; roofs become translucent when the character is behind their footprint. A jumping character's visual height remains separate from its ground shadow.
+Terrain and scenery are separate from entity state. `world3d.js` builds actual mesh ground, courtyard stones, curved temple roofs, gates, trees, bamboo, water and other scenery. Shared static geometry is merged by material, while repeated stones, roof details, leaves and grass use instancing. Water, lanterns, petals and other ambient elements animate independently. The depth buffer handles normal 3D occlusion; selected building materials fade when their footprint obscures the player. A jumping character's visual lift remains separate from its legal ground position.
 
-Original temple, tree, gate, body, equipment, character, pheasant and interface artwork lives in `public/art/` and loads through Pixi assets using Vite's base URL. Procedural Canvas artwork remains available as a fallback. Ambient shade and lantern light sit above the terrain without altering logical coordinates or collision. Generation briefs are recorded in [the art notes](../public/art/README.md).
+`renderer3d.js` loads the embedded [CC0 character GLB](model-assets.md) through `GLTFLoader`, clones its skeleton per humanoid, and drives twelve authored clips with a separate `AnimationMixer` for each avatar. Birds and other scene creatures use articulated mesh geometry. Hemisphere and directional lights, material shading, shadows and fog establish the 3D scene. The renderer includes an articulated mesh fallback if the character asset fails to load. Earlier cutout artwork remains in `public/art/` alongside interface artwork; it is not the active world renderer.
 
-The current compact authored world avoids a monolithic map texture. Its chunks are generated locally, not downloaded from a historical puzzle archive. A larger world should retain that structure and add an immutable remote chunk manifest, compact collision/elevation grid, viewport chunk selection and measured GPU budget. Downloading every chunk or pre-stitching a giant PNG would remove the memory benefit.
+The current compact zones are built locally and disposed when changing zones. They do not use historical puzzle archives or download terrain chunks, and no bounded remote streaming system is claimed. Larger worlds need spatial content loading, compact collision/elevation data and measured geometry, texture and shadow budgets before expanding the scene.
 
 ## Equipment state and appearance
 
@@ -70,13 +71,13 @@ An inventory item owns its stats and an optional appearance descriptor; `player.
 }
 ```
 
-Appearance supports a model, variant type, base color and optional trim, glow and grip. Model/type/grip values come from project allowlists; colors use six-digit hex values. These descriptors select original art and geometry rather than reference proprietary model IDs.
+Appearance supports a model, variant type, base color and optional trim, glow and grip. Model/type/grip values come from project allowlists; colors use six-digit hex values. These descriptors select the project's mesh and material variants rather than proprietary model IDs.
 
-World players use a plain unarmed body inside a Pixi container. Separate sprites render armor, helmet, boots, garment, main weapon and offhand; removing a piece hides that layer. The original equipment atlas supplies clothing, sword and shield textures. Procedural Canvas geometry supplies bows, staffs, glaives, spears, daggers, orbs and quivers. Cached material variants preserve painted shading while applying the item's color and trim.
+World humanoids share the GLB's 65-bone rig and twelve motion clips. Basic tunic, sleeves, trousers and shoes are separate skinned meshes. Equipping armor or boots selects the corresponding alternate clothing meshes and applies the item's material tint. Weapons, offhands, headgear, capes and pendants use separate 3D geometry attached to the appropriate hand, head or chest bone. Sword, dagger, bow, staff, glaive, spear, shield, orb and quiver shapes are built as mesh geometry. Their equipment state remains independent of the animation mixer.
 
-The appearance signature includes equipped item IDs, +N tiers and descriptors, so changed equipment refreshes the affected avatar. The cape has independent walking motion. A necklace draws a chest jewel; glow descriptors add a restrained floor ring and motes. `equipmentPreview(player)` extracts the same refreshed world avatar at higher resolution for the inventory paperdoll. NPCs and monsters retain their separate character atlas frames.
+The appearance signature includes equipped item IDs, +N tiers and descriptors, so changed equipment refreshes the affected avatar. The cape also deforms with movement; a necklace adds a chest jewel, and supported weapon descriptors add emissive details. `equipmentPreview(player)` renders the same 3D avatar factory and equipped pieces through a separate portrait camera for the inventory panel. NPCs and humanoid enemies use the shared rig; birds use their own articulated geometry.
 
-This is a modular 2.5D sprite renderer. Fully rigged 3D bodies, skinned equipment, motion retargeting and glTF/C3 conversion are future extensions to the same slot/state boundary.
+The active implementation is a 3D renderer with skeletal motion and modular equipment. More varied clothing silhouettes, weapon-specific animation sets and any historical C3 conversion remain future work. The current model's official sources, CC0 licenses, assembly process, bone names and clips are documented in [model assets](model-assets.md).
 
 Each class starts with its weapon, armor and boots equipped. Its bag also contains alternative weapons, armor, boots, a helmet, capes, a class-appropriate offhand and a Jade pendant. The quest rewards a separate Phoenix ring. Derived attack/defense sum equipped item stats; the prototype's +N bonus adds four attack and two defense per tier when the item has the corresponding positive base stat.
 
@@ -119,4 +120,4 @@ Before a persistent multiplayer launch, make character mutations transactional, 
 
 If exact 5017 or 5065 behavior becomes the selected target, pin that build in a separate ruleset. Add a converter for supported, lawfully available fixtures that emits the project's own map/item/animation schemas; keep source assets external to the repository. A legacy server adapter should translate historical packets into the same intent/event boundary rather than expose binary offsets throughout the renderer.
 
-Add Rust/WASM or a second 3D renderer only after an actual parser/animation requirement or profile identifies a bottleneck. The existing browser loop remains useful while compatibility research proceeds. See [research notes](research-notes.md) for verified upstream scope and [roadmap](roadmap.md) for acceptance milestones.
+Add Rust/WASM only after an actual parser requirement or profile identifies a bottleneck. The existing Three.js renderer and shared simulation remain independent of any historical adapter. See [research notes](research-notes.md) for verified upstream scope and [roadmap](roadmap.md) for acceptance milestones.

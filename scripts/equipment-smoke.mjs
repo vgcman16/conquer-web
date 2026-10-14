@@ -2,7 +2,14 @@ import { chromium } from "playwright";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 await mkdir("artifacts/equipment", { recursive: true });
-const browser = await chromium.launch();
+// Installed Chrome can use the native GPU for the full 3D scene. The default
+// remains bundled headless Chromium for environments without an installed browser.
+const browser = await chromium.launch({
+  ...(process.env.BROWSER_CHANNEL
+    ? { channel: process.env.BROWSER_CHANNEL }
+    : {}),
+  headless: process.env.BROWSER_HEADED !== "1",
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }),
   errors = [];
 page.on("pageerror", (e) => errors.push(e.message));

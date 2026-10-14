@@ -2,7 +2,10 @@ import { chromium } from "playwright";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 await fs.mkdir("artifacts", { recursive: true });
-const browser = await chromium.launch();
+const browser = await chromium.launch({
+  channel: process.env.BROWSER_CHANNEL || undefined,
+  headless: process.env.BROWSER_HEADED !== "1",
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } }),
   errors = [];
 page.on("pageerror", (e) => {
@@ -92,7 +95,7 @@ assert.equal(restored.quest.claimed, true);
 assert.equal(restored.level, saved.level);
 assert.equal(restored.nextXp, saved.nextXp);
 await page.click("#help-btn");
-assert.equal(await page.locator(".control-row").count(), 11);
+assert.equal(await page.locator(".control-row").count(), 12);
 await page.keyboard.press("Escape");
 assert.equal((await state()).modal, false);
 await page.screenshot({ path: "artifacts/final-city.png" });

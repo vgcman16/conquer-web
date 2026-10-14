@@ -1,5 +1,5 @@
 import "./style.css";
-import { GameRenderer } from "./renderer.js";
+import { GameRenderer } from "./renderer3d.js";
 import {
   CLASSES,
   zoneDefs,
@@ -80,7 +80,7 @@ addPlayer(world, player);
 state = snapshot(world, selfId);
 
 $("#app").innerHTML = `
-<header class="app-header"><div class="emblem"><span>龍</span></div><div class="brand">JADE REALM<small>CONQUER WEB · CLASSIC ADVENTURE</small></div><div class="header-divider"></div><span class="header-label">THE ROAD TO IMMORTALITY</span><div class="header-spacer"></div><span class="status" id="status"><i class="status-dot"></i> SOLO REALM</span><button class="header-link" id="connect-btn" title="Connect to multiplayer server">${icon("connect")}<span>Multiplayer</span></button><button class="header-link" id="help-btn" title="Controls">${icon("help")}</button></header>
+<header class="app-header"><div class="emblem"><span>龍</span></div><div class="brand">JADE REALM<small>CONQUER WEB · 3D REALM</small></div><div class="header-divider"></div><span class="header-label">THE ROAD TO IMMORTALITY</span><div class="header-spacer"></div><span class="status" id="status"><i class="status-dot"></i> SOLO REALM</span><button class="header-link" id="connect-btn" title="Connect to multiplayer server">${icon("connect")}<span>Multiplayer</span></button><button class="header-link" id="help-btn" title="Controls">${icon("help")}</button></header>
 <main class="game-shell"><div id="game"></div><div class="hud">
 <div class="player-card panel"><div class="portrait" id="portrait">${icon(classIcon(chosenClass))}<span class="level" id="level">1</span></div><div><div class="player-name" id="player-name">Wanderer</div><div class="player-class" id="player-class">TROJAN · NOVICE</div><div class="meter"><i id="hp-bar"></i></div><div class="meter stamina"><i id="stamina-bar"></i></div><div class="meter mana"><i id="mana-bar"></i></div></div><span class="resource-text" id="hp-text"></span></div>
 <div class="zone-heading"><small>THE JADE PROVINCE</small><h1 id="zone-title">Twin Haven</h1><p id="zone-desc">A sanctuary beneath the mountain</p></div>
@@ -105,12 +105,18 @@ let introDescription = () => {
 };
 function renderIntro() {
   $("#intro").innerHTML =
-    `<section class="modal intro-modal"><div class="intro-figure" aria-hidden="true"></div><div class="intro-content"><div class="intro-crest">龍</div><h2>Enter the Jade Realm</h2><div class="subtitle">YOUR JOURNEY BEGINS WITH A SINGLE LEAP</div><p>An open world of ancient cities, untamed wilds,<br>and the art of the blade. Choose your path.</p><div class="class-grid" style="grid-template-columns:repeat(${CLASSES.length},1fr)">${CLASSES.map((c) => `<button class="class-option ${chosenClass === c.id ? "active" : ""}" data-class="${c.id}">${icon(classIcon(c.id))}<span>${esc(c.name)}</span></button>`).join("")}</div><div class="class-description">${esc(introDescription())}</div><label class="name-label" for="hero-name">YOUR CHARACTER’S NAME</label><input class="name-input" id="hero-name" maxlength="18" value="${esc(saved?.name || "Wanderer")}" autocomplete="off"><button id="start-btn" class="primary">${saved ? "CONTINUE YOUR JOURNEY" : "BEGIN YOUR JOURNEY"} ${icon("arrow")}</button><p class="intro-note">Built from scratch · Original art · Free to explore<br>Progress saves in this browser. Multiplayer is available through your own server.</p></div></section>`;
+    `<section class="modal intro-modal"><div class="intro-figure" aria-hidden="true"></div><div class="intro-content"><div class="intro-crest">龍</div><h2>Enter the Jade Realm</h2><div class="subtitle">YOUR JOURNEY BEGINS WITH A SINGLE LEAP</div><p>An open world of ancient cities, untamed wilds,<br>and the art of the blade. Choose your path.</p><div class="class-grid" style="grid-template-columns:repeat(${CLASSES.length},1fr)">${CLASSES.map((c) => `<button class="class-option ${chosenClass === c.id ? "active" : ""}" data-class="${c.id}">${icon(classIcon(c.id))}<span>${esc(c.name)}</span></button>`).join("")}</div><div class="class-description">${esc(introDescription())}</div><label class="name-label" for="hero-name">YOUR CHARACTER’S NAME</label><input class="name-input" id="hero-name" maxlength="18" value="${esc(saved?.name || "Wanderer")}" autocomplete="off"><button id="start-btn" class="primary">${saved ? "CONTINUE YOUR JOURNEY" : "BEGIN YOUR JOURNEY"} ${icon("arrow")}</button><p class="intro-note">A living 3D world · Animated characters · Free to explore<br>Progress saves in this browser. Multiplayer is available through your own server.</p></div></section>`;
   document.querySelectorAll("[data-class]").forEach(
     (b) =>
       (b.onclick = () => {
         saved = { ...saved, name: $("#hero-name").value };
         chosenClass = b.dataset.class;
+        if (mode === "intro") {
+          world = createWorld();
+          player = createPlayer(selfId, saved?.name || "Wanderer", chosenClass);
+          addPlayer(world, player);
+          state = snapshot(world, selfId);
+        }
         renderIntro();
       }),
   );
@@ -426,6 +432,7 @@ function controls() {
       ["Click", "Walk / select enemy"],
       ["Right click", "Jump to cursor"],
       ["WASD", "Walk in screen direction"],
+      ["Scroll", "Zoom the 3D camera"],
       ["Space", "Attack nearest target"],
       ["Q", "Aim & cast class skill"],
       ["J", "Jump toward cursor"],
@@ -750,7 +757,7 @@ $("#game").addEventListener("pointermove", (e) => {
   renderer.setPointer?.(e.clientX, e.clientY);
 });
 $("#game").addEventListener("pointerdown", (e) => {
-  if (mode !== "play") return;
+  if (mode !== "play" || e.button === 1) return;
   pointer = renderer.screenToWorld(e.clientX, e.clientY);
   if (e.button === 2 || mobileJump) {
     targetId = null;
@@ -877,7 +884,13 @@ function tick(dt, draw = true) {
       }
     }
   }
-  if (draw) renderer.draw({ ...state, selectedTarget: targetId }, selfId, dt);
+  if (renderer.supportsUnrenderedStep || draw)
+    renderer.draw(
+      { ...state, selectedTarget: targetId, sceneMode: mode },
+      selfId,
+      dt,
+      draw,
+    );
   lastUi += dt;
   lastSave += dt;
   if (lastUi > 0.1) {
@@ -890,7 +903,8 @@ function tick(dt, draw = true) {
   }
 }
 let lastZone = self().zone;
-let last = performance.now();
+let last = performance.now(),
+  manualTime = false;
 function frame(now) {
   if (lastZone !== self().zone) {
     onZoneChange();
@@ -898,14 +912,25 @@ function frame(now) {
   }
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
-  tick(dt);
+  if (!manualTime) tick(dt);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 window.advanceTime = (ms) => {
+  // Automated stepping owns the clock so a slow GPU cannot advance the world
+  // between two captures of the same animation or jump.
+  manualTime = true;
   for (let i = 0; i < Math.ceil(ms / 16.6667); i++) tick(1 / 60, false);
-  renderer.draw({ ...state, selectedTarget: targetId }, selfId, 1 / 60);
+  renderer.draw(
+    { ...state, selectedTarget: targetId, sceneMode: mode },
+    selfId,
+    renderer.supportsUnrenderedStep ? 0 : 1 / 60,
+  );
   updateUI();
+};
+window.resumeLiveTime = () => {
+  manualTime = false;
+  last = performance.now();
 };
 window.render_game_to_text = () => {
   const p = self();
@@ -913,7 +938,7 @@ window.render_game_to_text = () => {
     mode,
     connection: online ? "websocket" : "solo",
     coordinateSystem:
-      "logical diamond grid; +x down-right, +y down-left; tile64x32; canvas centered on player",
+      "3D world: logical x/y map to ground x/z, elevation is vertical y; isometric camera follows player",
     selfId,
     player: p,
     zone: zoneDefs[p.zone]?.name,
@@ -932,10 +957,20 @@ window.render_game_to_text = () => {
     portal: zoneDefs[p.zone]?.portal,
     targetId,
     modal: !$("#modal").classList.contains("hidden"),
+    renderer: renderer.getDebugState(),
   });
 };
-window.addEventListener("resize", () => renderer.resize());
-document.addEventListener("fullscreenchange", () => renderer.resize());
+function resizeView() {
+  renderer.resize();
+  if (manualTime)
+    renderer.draw(
+      { ...state, selectedTarget: targetId, sceneMode: mode },
+      selfId,
+      0,
+    );
+}
+window.addEventListener("resize", resizeView);
+document.addEventListener("fullscreenchange", resizeView);
 window.addEventListener("beforeunload", save);
 renderIntro();
 updateUI();

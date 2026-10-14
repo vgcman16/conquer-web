@@ -2202,3 +2202,103 @@ svg {
   background-image: url("/art/icons.png");
   background-position: 0 100%;
 }
+/* The entry view reveals the live 3D world; no character cutout is used. */
+#intro.overlay {
+  justify-content: flex-start;
+  background: linear-gradient(90deg, #0a1716a0, transparent 75%);
+  backdrop-filter: none;
+  padding-left: max(35px, calc((100vw - 1200px) / 2));
+}
+.intro-modal {
+  width: 440px;
+  min-height: 0;
+  padding: 30px 32px;
+  background: linear-gradient(135deg, #14271cee, #101f18ed);
+  box-shadow: 0 18px 80px #06100960;
+}
+.intro-content {
+  width: 100%;
+}
+.intro-figure {
+  display: none;
+}
+.intro-modal h2 {
+  font-size: 30px;
+  max-width: 100%;
+  line-height: 1.35;
+}
+.intro-modal .intro-crest {
+  margin-bottom: 18px;
+}
+.intro-modal .subtitle {
+  font-size: 7px;
+  letter-spacing: 1.7px;
+}
+.intro-modal p {
+  font-size: 11px;
+}
+.intro-modal .class-grid {
+  margin-top: 20px;
+}
+.intro-modal .class-option {
+  font-size: 8px;
+}
+.intro-modal .intro-note {
+  font-size: 8px !important;
+}
+.portrait {
+  background-image: radial-gradient(ellipse at 40% 30%, #647b55, #1c3125);
+  background-size: auto;
+  background-position: center;
+}
+.portrait > svg {
+  display: block;
+}
+.portrait {
+  color: #e1ca8d;
+}
+.portrait svg {
+  width: 30px;
+  height: 30px;
+}
+#game {
+  isolation: isolate;
+}
+#game > div {
+  pointer-events: none;
+}
+#game > canvas {
+  pointer-events: auto;
+}
+@media (max-width: 820px) {
+  #intro.overlay {
+    padding-left: 22px;
+  }
+  .intro-modal {
+    width: 390px;
+    padding: 29px;
+  }
+  .intro-modal h2 {
+    font-size: 29px;
+  }
+}
+@media (max-width: 480px) {
+  #intro.overlay {
+    padding: 17px;
+    justify-content: center;
+    background: #08160f70;
+  }
+  .intro-modal {
+    width: 100%;
+    padding: 27px 24px;
+  }
+  .intro-modal h2 {
+    font-size: 29px;
+  }
+  .intro-content {
+    width: 100%;
+  }
+}
+.game-shell:has(#intro:not(.hidden)) .hud {
+  visibility: hidden;
+}
